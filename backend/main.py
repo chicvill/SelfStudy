@@ -97,6 +97,88 @@ async def search_knowledge(tags: str):
     results = search_knowledge_by_tags(tag_list, limit=10)
     return {"status": "success", "data": results}
 
+class FormOnboardPayload(BaseModel):
+    session_id: str
+    form_data: dict
+
+class AuthPayload(BaseModel):
+    user_id: str
+    password: str
+
+from db import register_user, verify_user, save_user_profile, get_user_profile
+
+@app.post("/knowledge/signup")
+async def signup(payload: AuthPayload):
+    success = register_user(payload.user_id, payload.password)
+    if success:
+        return {"status": "success", "success": True, "message": "User registered successfully"}
+    else:
+        # FastAPI HTTP exception can be caught by axios, let's just return a dict with success: false for the frontend
+        return {"status": "error", "success": False, "message": "User ID already exists or failed to register"}
+
+@app.post("/knowledge/login")
+async def login(payload: AuthPayload):
+    success = verify_user(payload.user_id, payload.password)
+    if success:
+        return {"status": "success", "success": True, "message": "Login successful"}
+    else:
+        return {"status": "error", "success": False, "message": "Invalid user ID or password"}
+
+@app.get("/knowledge/profile/{user_id}")
+async def get_profile(user_id: str):
+    profile_data = get_user_profile(user_id)
+    return {"status": "success", "data": profile_data}
+
+class ProfilePayload(BaseModel):
+    user_id: str
+    form_data: dict
+
+@app.post("/knowledge/profile")
+async def save_profile(payload: ProfilePayload):
+    success = save_user_profile(payload.user_id, payload.form_data)
+    if success:
+        return {"status": "success", "message": "Profile saved successfully"}
+    return {"status": "error", "message": "Failed to save profile"}
+
+from scheduler import calculate_schedule
+
+@app.post("/knowledge/form_onboard")
+async def onboard_via_form(payload: FormOnboardPayload):
+    """질문지(Form) 데이터를 받아 즉시 Mode 2 세션을 만들고 초안을 생성함"""
+    user_id = f"user_{uuid.uuid4().hex[:6]}"
+    
+    tags = ["대화형온보딩", payload.form_data.get("goal", "기본목표")]
+    
+    # 1. AI를 통한 과목/단원 및 배분율(%) 추출
+    ai_draft = generate_rag_curriculum(payload.form_data, tags)
+    
+    # 2. 알고리즘을 이용한 정밀 캘린더 스케줄링
+    draft = calculate_schedule(payload.form_data, ai_draft)
+    
+    ai_greeting = "작성해주신 질문지를 바탕으로 100% 맞춤형 초안 진도표를 생성했습니다! 🎉\n\n좌측의 스케줄을 확인해 보시고, 수정하고 싶은 부분을 우측 채팅창에 편하게 말씀해 주세요. (예: 일요일은 쉬게 해줘, 방정식 단원에 시간 더 배정해줘)"
+    
+    chat_history = [
+        {"role": "user", "content": "[시스템: 사용자가 맞춤형 질문지를 제출했습니다.]\n" + str(payload.form_data)},
+        {"role": "assistant", "content": ai_greeting}
+    ]
+    
+    save_chat_session(
+        session_id=payload.session_id,
+        user_id=user_id,
+        current_stage=2,
+        chat_history=chat_history,
+        collected_data=payload.form_data,
+        draft_schedule=draft,
+        is_finalized=False
+    )
+    
+    return {
+        "status": "success",
+        "message": "폼 기반 온보딩 완료",
+        "ai_response": ai_greeting,
+        "draft_schedule": draft
+    }
+
 class ChatPayload(BaseModel):
     session_id: str
     message: str
@@ -142,16 +224,22 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
         {"role": "assistant", "content": ai_result["ai_response"]}
     ]
     
-    new_stage = ai_result["new_stage"]
-    new_collected_data = ai_result["new_collected_data"]
-    new_draft_schedule = ai_result.get("new_draft_schedule", session.get("draft_schedule"))
+    new_stage = ai_result.get("new_stage", current_stage)
+    new_collected_data = ai_result.get("new_collected_data", session.get("collected_data", {}))
+    
+    # Mode 2 수정일 경우
+    if current_stage == 2 and "new_spreadsheet_data" in ai_result:
+        # AI가 변경한 스프레드시트 배분율을 기반으로 새로운 스케줄을 다시 계산함!
+        updated_spreadsheet = ai_result["new_spreadsheet_data"]
+        new_draft_schedule = calculate_schedule(new_collected_data, updated_spreadsheet)
+    else:
+        new_draft_schedule = ai_result.get("new_draft_schedule", session.get("draft_schedule"))
 
     # Mode 1(목표 설정)에서 Mode 2(초안 편집)로 막 넘어간 경우: 즉시 초안(RAG) 생성
     if current_stage == 1 and new_stage == 2:
         tags = ["대화형온보딩", new_collected_data.get("목표", "기본목표")]
-        # 동기적으로 초안 생성 (사용자가 바로 봐야 하므로)
-        draft = generate_rag_curriculum(new_collected_data, tags)
-        new_draft_schedule = draft
+        ai_draft = generate_rag_curriculum(new_collected_data, tags)
+        new_draft_schedule = calculate_schedule(new_collected_data, ai_draft)
         ai_result["ai_response"] += "\n\n🎉 목표가 파악되었습니다! 화면 좌측에 AI가 생성한 '초안 일정'을 띄워드렸어요. 수정하고 싶은 부분이 있다면 저에게 편하게 말씀해 주세요. (예: 주말 일정은 삭제해 줘)"
 
     # 세션 DB 저장
@@ -218,9 +306,79 @@ async def finalize_schedule(payload: FinalizePayload):
     
     return {"status": "success", "message": "성공적으로 확정되었습니다.", "observer_code": observer_code}
 
+class UpdateWeightsPayload(BaseModel):
+    session_id: str
+    new_spreadsheet_data: dict
+
+@app.post("/knowledge/schedule/update_weights")
+async def update_schedule_weights(payload: UpdateWeightsPayload):
+    """사용자가 직접 UI에서 과목/단원 비중을 조절했을 때 스케줄을 재계산"""
+    session = get_chat_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    collected_data = session.get("collected_data", {})
+    
+    # 새로운 스프레드시트 기반으로 스케줄 재계산
+    new_draft_schedule = calculate_schedule(collected_data, payload.new_spreadsheet_data)
+    
+    # 세션에 저장
+    save_chat_session(
+        session_id=session["session_id"],
+        user_id=session["user_id"],
+        current_stage=session["current_stage"],
+        chat_history=session["chat_history"],
+        collected_data=collected_data,
+        draft_schedule=new_draft_schedule,
+        is_finalized=session["is_finalized"]
+    )
+    
+    return {
+        "status": "success",
+        "message": "진도표가 성공적으로 재조정되었습니다.",
+        "draft_schedule": new_draft_schedule
+    }
+
 class ReschedulePayload(BaseModel):
     session_id: str
     schedule_id: str
+
+class EvaluatePayload(BaseModel):
+    session_id: str
+    subject: str
+    explanation: str
+
+@app.post("/knowledge/evaluate")
+async def evaluate_understanding(payload: EvaluatePayload):
+    """학생의 구술 설명을 AI가 평가하여 점수(0~100)와 피드백을 반환"""
+    prompt = f"""
+학생이 방금 공부한 [{payload.subject}] 과목의 내용을 자기만의 언어로 설명했습니다.
+학생의 설명: "{payload.explanation}"
+
+이 설명을 평가하여 0에서 100 사이의 점수와 짧은 피드백(1~2문장)을 주세요.
+출력은 반드시 아래 JSON 구조여야 합니다.
+{{
+  "score": 85,
+  "feedback": "..."
+}}
+"""
+    try:
+        from ai_engine import gemini_client
+        from google.genai import types
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.5
+            )
+        )
+        import json
+        result = json.loads(response.text)
+        return result
+    except Exception as e:
+        print(f"[EVAL ERR] {e}")
+        return {"score": 0, "feedback": "평가 시스템 오류"}
 
 @app.post("/knowledge/chat/reschedule")
 async def start_reschedule(payload: ReschedulePayload):
@@ -289,7 +447,6 @@ async def get_student_schedule(session_id: str):
 
 class TaskTogglePayload(BaseModel):
     week_number: int
-    day: str
     task_index: int
     completed: bool
 
@@ -307,11 +464,10 @@ async def toggle_task_completion(schedule_id: str, payload: TaskTogglePayload):
     # 해당 주차 찾기
     for week in sched_payload.get("curriculum", []):
         if week["week_number"] == payload.week_number:
-            # 해당 요일 및 인덱스 찾기
-            matching_tasks = [t for t in week.get("daily_tasks", []) if t["day"] == payload.day]
-            if payload.task_index < len(matching_tasks):
-                matching_tasks[payload.task_index]["completed"] = payload.completed
-                break
+            daily_tasks = week.get("daily_tasks", [])
+            if payload.task_index < len(daily_tasks):
+                daily_tasks[payload.task_index]["completed"] = payload.completed
+            break
                 
     # 변경된 페이로드 다시 저장 (tags 등은 기존 것 유지)
     insert_knowledge(

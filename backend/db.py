@@ -1,41 +1,20 @@
+import sqlite3
+import json
 import os
-import psycopg2
-from psycopg2 import pool as pg_pool
-from psycopg2.extras import RealDictCursor
-from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv(), override=True)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mqcafe_user:mqcafe_pass@localhost:5432/mqcafe_db")
-
-_pool = None
-
-def get_pool():
-    global _pool
-    if _pool is None or _pool.closed:
-        _pool = pg_pool.ThreadedConnectionPool(1, 5, dsn=DATABASE_URL)
-    return _pool
+DB_FILE = os.path.join(os.path.dirname(__file__), 'selfstudy.db')
 
 def get_db_conn():
     try:
-        pool = get_pool()
-        raw = pool.getconn()
-        raw.autocommit = False
-        raw.set_client_encoding('UTF8')
-        return raw
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
     except Exception as e:
         print(f"DB Connection Error: {e}")
         return None
 
-def put_db_conn(conn):
-    try:
-        if conn and not conn.closed:
-            conn.rollback()
-            get_pool().putconn(conn)
-    except Exception:
-        pass
-
 def init_study_knowledge_db():
-    """지식정보창고(Knowledge Base) 기반의 RAG DB 스키마 생성"""
+    """지식정보창고(Knowledge Base) 기반의 RAG DB 스키마 생성 (SQLite)"""
     conn = get_db_conn()
     if not conn:
         print("[ERR] Failed to connect DB for init_study_knowledge_db")
@@ -43,14 +22,14 @@ def init_study_knowledge_db():
     try:
         cur = conn.cursor()
         
-        # 지식정보창고 핵심 테이블
+        # 지식정보창고 핵심 테이블 (JSONB -> TEXT, TEXT[] -> TEXT)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS study_knowledge_bundles (
-                id TEXT PRIMARY KEY,           -- 고유 ID (uuid 등)
-                domain_type TEXT NOT NULL,     -- 'GoalSetting', 'StudySchedule', 'ProgressReport', 'AIFeedback'
-                tags TEXT[] DEFAULT '{}',      -- 검색을 위한 메타데이터 태그 배열 (PostgreSQL Array)
-                payload JSONB NOT NULL DEFAULT '{}', -- 실제 자유형태의 데이터
-                created_at TIMESTAMP DEFAULT NOW()
+                id TEXT PRIMARY KEY,
+                domain_type TEXT NOT NULL,
+                tags TEXT DEFAULT '[]',
+                payload TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
@@ -60,40 +39,53 @@ def init_study_knowledge_db():
                 session_id TEXT PRIMARY KEY,
                 user_id TEXT,
                 current_stage INTEGER DEFAULT 1,
-                chat_history JSONB DEFAULT '[]',
-                collected_data JSONB DEFAULT '{}',
-                draft_schedule JSONB DEFAULT NULL,
-                is_finalized BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
+                chat_history TEXT DEFAULT '[]',
+                collected_data TEXT DEFAULT '{}',
+                draft_schedule TEXT DEFAULT NULL,
+                is_finalized BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
-        # 태그 검색 성능을 위한 GIN 인덱스 (선택적이지만 권장)
+        # 사용자(Login) 테이블
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_study_knowledge_tags ON study_knowledge_bundles USING GIN (tags);
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         """)
         
+        # 유저별 최신 프로필 폼 저장용 테이블
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id TEXT PRIMARY KEY,
+                form_data TEXT DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # 관리자 계정 기본 세팅 (admin / 1212)
+        cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('admin', '1212')")
+        
         conn.commit()
-        print("[OK] study_knowledge_bundles schema initialized successfully.")
+        print("[OK] SQLite study_knowledge_bundles schema initialized successfully.")
     except Exception as e:
         conn.rollback()
         print(f"[ERR] Study DB Init Error: {e}")
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
 
 def insert_knowledge(doc_id: str, domain_type: str, tags: list, payload: dict):
-    """지식정보를 창고에 저장"""
-    import json
     conn = get_db_conn()
     if not conn: return False
     try:
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO study_knowledge_bundles (id, domain_type, tags, payload)
-            VALUES (%s, %s, %s, %s::jsonb)
-        """, (doc_id, domain_type, tags, json.dumps(payload, ensure_ascii=False)))
+            VALUES (?, ?, ?, ?)
+        """, (doc_id, domain_type, json.dumps(tags, ensure_ascii=False), json.dumps(payload, ensure_ascii=False)))
         conn.commit()
         return True
     except Exception as e:
@@ -101,87 +93,114 @@ def insert_knowledge(doc_id: str, domain_type: str, tags: list, payload: dict):
         print(f"Insert Error: {e}")
         return False
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
 
 def get_knowledge(doc_id: str):
     conn = get_db_conn()
     if not conn: return None
     try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM study_knowledge_bundles WHERE doc_id = %s", (doc_id,))
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM study_knowledge_bundles WHERE id = ?", (doc_id,))
         row = cur.fetchone()
-        if row and isinstance(row.get('payload'), str):
-            import json
-            row['payload'] = json.loads(row['payload'])
-        return row
+        if row:
+            row_dict = dict(row)
+            if row_dict.get('payload'):
+                row_dict['payload'] = json.loads(row_dict['payload'])
+            if row_dict.get('tags'):
+                row_dict['tags'] = json.loads(row_dict['tags'])
+            return row_dict
+        return None
     except Exception as e:
         print(f"Get Error: {e}")
         return None
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
 
 def search_knowledge_by_tags(tags: list, limit: int = 5) -> list:
-    """주어진 태그 중 하나라도 일치(Overlap)하는 과거 데이터를 최신순으로 검색"""
+    """주어진 태그 중 하나라도 일치(Overlap)하는 과거 데이터를 최신순으로 검색 (SQLite)"""
     if not tags: return []
     conn = get_db_conn()
     if not conn: return []
     try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        # && 연산자: 배열 간 교집합이 있는지 확인
-        cur.execute("""
+        cur = conn.cursor()
+        # SQLite에서는 JSON 연산자나 LIKE를 이용해 배열 매칭을 우회
+        # 여기서는 단순하게 각 태그에 대해 LIKE 검색 수행
+        conditions = []
+        params = []
+        for tag in tags:
+            conditions.append("tags LIKE ?")
+            params.append(f"%\"{tag}\"%")
+            
+        where_clause = " OR ".join(conditions)
+        
+        query = f"""
             SELECT * FROM study_knowledge_bundles
-            WHERE tags && %s::text[]
+            WHERE {where_clause}
             ORDER BY created_at DESC
-            LIMIT %s
-        """, (tags, limit))
-        return [dict(r) for r in cur.fetchall()]
+            LIMIT ?
+        """
+        params.append(limit)
+        
+        cur.execute(query, tuple(params))
+        results = []
+        for row in cur.fetchall():
+            r = dict(row)
+            if r.get('payload'): r['payload'] = json.loads(r['payload'])
+            if r.get('tags'): r['tags'] = json.loads(r['tags'])
+            results.append(r)
+        return results
     except Exception as e:
         print(f"Search Error: {e}")
         return []
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
 
 def get_chat_session(session_id: str):
     conn = get_db_conn()
     if not conn: return None
     try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM study_chat_sessions WHERE session_id = %s", (session_id,))
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM study_chat_sessions WHERE session_id = ?", (session_id,))
         row = cur.fetchone()
         if row:
-            return dict(row)
+            row_dict = dict(row)
+            for col in ['chat_history', 'collected_data', 'draft_schedule']:
+                if row_dict.get(col):
+                    row_dict[col] = json.loads(row_dict[col])
+            # SQLite stores boolean as 1/0
+            row_dict['is_finalized'] = bool(row_dict.get('is_finalized'))
+            return row_dict
         return None
     except Exception as e:
         print(f"Get Chat Error: {e}")
         return None
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
 
 def save_chat_session(session_id: str, user_id: str, current_stage: int, chat_history: list, collected_data: dict, draft_schedule: dict = None, is_finalized: bool = False):
-    import json
     conn = get_db_conn()
     if not conn: return False
     try:
         cur = conn.cursor()
-        
         ds_json = json.dumps(draft_schedule, ensure_ascii=False) if draft_schedule else None
         
         cur.execute("""
             INSERT INTO study_chat_sessions (session_id, user_id, current_stage, chat_history, collected_data, draft_schedule, is_finalized)
-            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
-            ON CONFLICT (session_id) 
-            DO UPDATE SET 
-                current_stage = EXCLUDED.current_stage,
-                chat_history = EXCLUDED.chat_history,
-                collected_data = EXCLUDED.collected_data,
-                draft_schedule = EXCLUDED.draft_schedule,
-                is_finalized = EXCLUDED.is_finalized,
-                updated_at = NOW()
-        """, (session_id, user_id, current_stage, json.dumps(chat_history, ensure_ascii=False), json.dumps(collected_data, ensure_ascii=False), ds_json, is_finalized))
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET 
+                current_stage = excluded.current_stage,
+                chat_history = excluded.chat_history,
+                collected_data = excluded.collected_data,
+                draft_schedule = excluded.draft_schedule,
+                is_finalized = excluded.is_finalized,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            session_id, user_id, current_stage, 
+            json.dumps(chat_history, ensure_ascii=False), 
+            json.dumps(collected_data, ensure_ascii=False), 
+            ds_json, 
+            1 if is_finalized else 0
+        ))
         conn.commit()
         return True
     except Exception as e:
@@ -189,5 +208,73 @@ def save_chat_session(session_id: str, user_id: str, current_stage: int, chat_hi
         print(f"Save Chat Error: {e}")
         return False
     finally:
-        cur.close()
-        put_db_conn(conn)
+        conn.close()
+
+def register_user(user_id: str, password: str) -> bool:
+    conn = get_db_conn()
+    if not conn: return False
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (user_id, password) VALUES (?, ?)", (user_id, password))
+        conn.commit()
+        return True
+    except Exception as e:
+        # likely UNIQUE constraint failed
+        conn.rollback()
+        print(f"Register Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def verify_user(user_id: str, password: str) -> bool:
+    conn = get_db_conn()
+    if not conn: return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT password FROM users WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+        if row and row['password'] == password:
+            return True
+        return False
+    except Exception as e:
+        print(f"Verify Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def save_user_profile(user_id: str, form_data: dict):
+    conn = get_db_conn()
+    if not conn: return False
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO user_profiles (user_id, form_data)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                form_data = excluded.form_data,
+                updated_at = CURRENT_TIMESTAMP
+        """, (user_id, json.dumps(form_data, ensure_ascii=False)))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Save Profile Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_user_profile(user_id: str):
+    conn = get_db_conn()
+    if not conn: return {}
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT form_data FROM user_profiles WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+        if row and row['form_data']:
+            return json.loads(row['form_data'])
+        return {}
+    except Exception as e:
+        print(f"Get Profile Error: {e}")
+        return {}
+    finally:
+        conn.close()

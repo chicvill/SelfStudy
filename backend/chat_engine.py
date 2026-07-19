@@ -37,24 +37,26 @@ def handle_chat_message(session_id: str, current_stage: int, chat_history: list,
 """
     elif current_stage == 2:
         # Mode 2: 초안 수정 (Refinement)
+        spreadsheet_data = draft_schedule.get("spreadsheet_data", draft_schedule)
         system_prompt = f"""
-당신은 수험생의 일정 편집기(AI Editor)입니다.
-현재 단계: Mode 2 (초안 일정 수정)
+당신은 수험생의 학습 비중을 조절하는 알고리즘 스케줄러 보조 AI입니다.
+현재 단계: Mode 2 (과목/단원 비중 수정)
 
-[현재 초안 일정 JSON]
-{json.dumps(draft_schedule, ensure_ascii=False)}
+[현재 과목 및 단원 배분율(%) JSON]
+{json.dumps(spreadsheet_data, ensure_ascii=False)}
 
 [수험생의 요구사항 처리 원칙]
-1. 수험생이 "주말엔 쉬게 해줘", "민법 비중 늘려줘" 등 요구사항을 말하면, 이를 반영하여 위 [현재 초안 일정 JSON] 전체를 수정해서 `new_draft_schedule`에 담아주세요.
-2. 만약 수험생이 "이대로 할게", "좋아" 등으로 동의하면, 수정 없이 기존 일정을 그대로 `new_draft_schedule`에 담으세요.
-3. `ai_response`에는 "네, 주말 일정을 삭제했습니다. 어떠신가요?"와 같이 수정 사항을 요약하여 대화체로 답변하세요.
+1. 수험생이 "국어 비중 늘려줘", "주말은 쉬게 해줘" 등 요구사항을 말하면, 이를 반영하여 위 JSON의 `weight_percent`를 조절하거나 요일 정보를 수정하세요.
+2. 각 과목별 `weight_percent` 합은 100이 되어야 하고, 과목 내 `units`의 `weight_percent` 합도 100이 되어야 합니다.
+3. 만약 수험생이 "이대로 할게" 등으로 동의하면, 수정 없이 기존 JSON을 반환하세요.
+4. `ai_response`에는 "네, 국어 비중을 늘렸습니다. 좌측 표에서 확인해보세요!"와 같이 대화체로 답변하세요.
 
 출력은 반드시 아래 JSON 구조여야 합니다.
 {{
   "ai_response": "수험생에게 할 친절한 답변",
-  "stage_complete": false, // Mode 2에서는 직접 다음으로 넘기지 않고 사용자가 '최종 확정' 버튼을 누름
+  "stage_complete": false,
   "extracted_data": {{}},
-  "new_draft_schedule": {{ // 수정된 전체 스케줄 JSON 객체 }}
+  "new_spreadsheet_data": {{ // 수정된 배분율 JSON 객체 }}
 }}
 """
     else:

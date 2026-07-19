@@ -40,7 +40,7 @@ def generate_rag_curriculum(user_goal: dict, tags: list) -> dict:
     prompt = f"""
 당신은 모든 자격증과 개인 목표 달성을 도와주는 만능 AI 튜터입니다.
 아래의 [과거 지식 데이터]를 분석하여 성공 요인은 취하고 실패 요인은 회피하는 전략을 세우세요.
-그리고 [새로운 수험생 정보]를 바탕으로 2주 분량의 상세한 '진도 계획(Progress Plan)' JSON을 작성해주세요.
+그리고 [새로운 수험생 정보]를 바탕으로 정밀한 알고리즘 스케줄링을 위한 '과목 및 단원별 배분율' JSON을 작성해주세요.
 
 [과거 지식 데이터 (Context)]
 {context_text}
@@ -49,22 +49,34 @@ def generate_rag_curriculum(user_goal: dict, tags: list) -> dict:
 목표: {json.dumps(user_goal, ensure_ascii=False)}
 
 [요구사항]
+- 수험생의 목표를 이루기 위해 필요한 과목들을 도출하고, 과목별 중요도에 따라 학습 시간 배분율(%)의 총합이 100%가 되도록 설정하세요.
+- 각 과목 하위에 구체적인 단원(목차) 리스트를 생성하고, 해당 과목 내에서 단원별 배분율(%)의 총합이 100%가 되도록 설정하세요.
 - 결과는 단일 JSON 객체여야 합니다.
 - 다음과 같은 구조를 가져야 합니다:
   {{
-    "plan_title": "...",
-    "duration_weeks": 2,
+    "plan_title": "목표 달성 진도 계획",
     "overall_strategy": "과거 데이터 분석을 반영한 학습 전략",
-    "curriculum": [
+    "target_date_iso": "YYYY-MM-DD",
+    "subjects": [
       {{
-        "week_number": 1,
-        "week_theme": "...",
-        "daily_tasks": [
-          {{"day": "Day 1", "subject": "과목명", "task_title": "상세 내용", "estimated_minutes": 120}}
+        "subject_name": "국어",
+        "weight_percent": 40,
+        "units": [
+          {{"unit_name": "1단원. 시의 이해", "weight_percent": 30}},
+          {{"unit_name": "2단원. 소설의 이해", "weight_percent": 70}}
+        ]
+      }},
+      {{
+        "subject_name": "수학",
+        "weight_percent": 60,
+        "units": [
+          {{"unit_name": "1단원. 방정식", "weight_percent": 50}},
+          {{"unit_name": "2단원. 함수", "weight_percent": 50}}
         ]
       }}
     ]
   }}
+- target_date_iso는 사용자가 입력한 마감일(예: 2026.11.10, 다음달 말)을 무조건 정확한 날짜 포맷(YYYY-MM-DD)으로 파싱해야 합니다.
 - 출력은 백틱(```json) 없이 원시 JSON 문자열로만 반환하십시오.
 """
     # 3. AI 답변 생성 (Generation)
