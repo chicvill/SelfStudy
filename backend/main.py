@@ -144,7 +144,7 @@ from scheduler import calculate_schedule
 
 @app.post("/knowledge/form_onboard")
 async def onboard_via_form(payload: FormOnboardPayload):
-    """질문지(Form) 데이터를 받아 즉시 Mode 2 세션을 만들고 초안을 생성함"""
+    """질문지(Form) 데이터를 받아 즉시 Mode 2 세션을 만들고 초안을 생성함 (기존 레거시)"""
     user_id = f"user_{uuid.uuid4().hex[:6]}"
     
     tags = ["대화형온보딩", payload.form_data.get("goal", "기본목표")]
@@ -179,6 +179,101 @@ async def onboard_via_form(payload: FormOnboardPayload):
         "draft_schedule": draft
     }
 
+from ai_engine import generate_subjects, generate_subject_weights, generate_units, generate_unit_weights
+
+class GenSubjectsPayload(BaseModel):
+    user_goal: dict
+    tags: list
+
+@app.post("/knowledge/generate_subjects")
+async def api_generate_subjects(payload: GenSubjectsPayload):
+    res = generate_subjects(payload.user_goal, payload.tags)
+    return {"status": "success", "data": res}
+
+class GenSubjectWeightsPayload(BaseModel):
+    subjects: list
+    user_goal: dict
+
+@app.post("/knowledge/generate_subject_weights")
+async def api_generate_subject_weights(payload: GenSubjectWeightsPayload):
+    res = generate_subject_weights(payload.subjects, payload.user_goal)
+    return {"status": "success", "data": res}
+
+class GenUnitsPayload(BaseModel):
+    subjects: list
+    user_goal: dict
+
+@app.post("/knowledge/generate_units")
+async def api_generate_units(payload: GenUnitsPayload):
+    res = generate_units(payload.subjects, payload.user_goal)
+    return {"status": "success", "data": res}
+
+class GenUnitWeightsPayload(BaseModel):
+    subjects_with_units: list
+    user_goal: dict
+
+@app.post("/knowledge/generate_unit_weights")
+async def api_generate_unit_weights(payload: GenUnitWeightsPayload):
+    res = generate_unit_weights(payload.subjects_with_units, payload.user_goal)
+    return {"status": "success", "data": res}
+
+class GenerateScheduleFinalPayload(BaseModel):
+    form_data: dict
+    ai_draft: dict
+    session_id: str
+
+@app.post("/knowledge/generate_schedule_final")
+async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
+    draft = calculate_schedule(payload.form_data, payload.ai_draft)
+    
+    chat_history = [
+        {"role": "user", "content": "[시스템: 단계별 스케줄 생성이 완료되었습니다.]"},
+        {"role": "assistant", "content": "스케줄 생성이 완료되었습니다! 대시보드에서 일정을 확인하세요."}
+    ]
+    
+    user_id = payload.form_data.get("user_id", f"user_{uuid.uuid4().hex[:6]}")
+    
+    # 1. Goal 저장
+    import uuid
+    goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
+    tags = ["대화형온보딩", payload.form_data.get("목표", "기본목표")]
+    insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=payload.form_data)
+    
+    # 2. Schedule 저장 및 Observer Code 발급
+    import random, string
+    observer_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
+    
+    draft["ref_goal_id"] = goal_id 
+    draft["observer_code"] = observer_code
+    draft["session_id"] = payload.session_id
+    new_tags = tags + ["최종스케줄", f"obs_{observer_code}", f"sess_{payload.session_id}"]
+    
+    # 만약 기존에 일정이 있었다면 superseded 처리 (리스케줄링 대비)
+    search_tag = f"sess_{payload.session_id}"
+    old_results = search_knowledge_by_tags([search_tag], limit=5)
+    for old_doc in old_results:
+        if old_doc["payload"].get("status") != "superseded":
+            old_doc["payload"]["status"] = "superseded"
+            insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+            draft["ref_previous_schedule_id"] = old_doc["doc_id"]
+            break
+
+    insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
+    
+    save_chat_session(
+        session_id=payload.session_id,
+        user_id=user_id,
+        current_stage=3,
+        chat_history=chat_history,
+        collected_data=payload.form_data,
+        draft_schedule=draft,
+        is_finalized=True
+    )
+    
+    return {"status": "success", "draft_schedule": draft}
+
+
 class ChatPayload(BaseModel):
     session_id: str
     message: str
@@ -201,7 +296,11 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
             "is_finalized": False
         }
     
-    current_stage = session["current_stage"]
+    current_stage = int(session.get("current_stage", 1))
+    chat_history = list(session.get("chat_history", []))
+    collected_data = dict(session.get("collected_data", {}))
+    draft_schedule = dict(session.get("draft_schedule", {}) or {})
+
     if session.get("is_finalized"):
         return {"status": "success", "ai_response": "이미 확정된 일정입니다.", "current_stage": current_stage}
 
@@ -209,9 +308,9 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     ai_result = handle_chat_message(
         session_id=payload.session_id,
         current_stage=current_stage,
-        chat_history=session["chat_history"],
-        collected_data=session["collected_data"],
-        draft_schedule=session.get("draft_schedule"),
+        chat_history=chat_history,
+        collected_data=collected_data,
+        draft_schedule=draft_schedule,
         user_msg=payload.message
     )
 
@@ -219,7 +318,7 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=ai_result["error"])
 
     # 채팅 기록 업데이트
-    new_history = session["chat_history"] + [
+    new_history = chat_history + [
         {"role": "user", "content": payload.message},
         {"role": "assistant", "content": ai_result["ai_response"]}
     ]
@@ -245,10 +344,10 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     # 세션 DB 저장
     save_chat_session(
         session_id=payload.session_id,
-        user_id=session["user_id"],
-        current_stage=new_stage,
+        user_id=str(session.get("user_id", "")),
+        current_stage=int(new_stage),
         chat_history=new_history,
-        collected_data=new_collected_data,
+        collected_data=dict(new_collected_data),
         draft_schedule=new_draft_schedule,
         is_finalized=False
     )
@@ -352,10 +451,11 @@ class EvaluatePayload(BaseModel):
 async def evaluate_understanding(payload: EvaluatePayload):
     """학생의 구술 설명을 AI가 평가하여 점수(0~100)와 피드백을 반환"""
     prompt = f"""
-학생이 방금 공부한 [{payload.subject}] 과목의 내용을 자기만의 언어로 설명했습니다.
+학생이 방금 공부한 [{payload.subject}] 목표에 대해 자기만의 언어로 달성 과정을 설명했습니다.
 학생의 설명: "{payload.explanation}"
 
-이 설명을 평가하여 0에서 100 사이의 점수와 짧은 피드백(1~2문장)을 주세요.
+학생이 단순히 지식을 나열하는 것이 아니라, 자기만의 언어로 이해했는지, 그리고 학습 과정에서 어려웠던 점을 극복하려는 '메타인지적 노력'이 보이는지 중점적으로 평가해 주세요.
+이 설명을 평가하여 0에서 100 사이의 점수와 짧고 격려하는 피드백(1~2문장)을 주세요.
 출력은 반드시 아래 JSON 구조여야 합니다.
 {{
   "score": 85,
@@ -365,6 +465,8 @@ async def evaluate_understanding(payload: EvaluatePayload):
     try:
         from ai_engine import gemini_client
         from google.genai import types
+        if not gemini_client:
+            return {"error": "AI 엔진 미설정"}
         response = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,

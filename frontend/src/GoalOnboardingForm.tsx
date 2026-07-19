@@ -6,11 +6,12 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 interface GoalOnboardingFormProps {
   sessionId: string;
   userId: string;
-  onComplete: () => void;
+  onComplete: (formData: any) => void;
 }
 
 export default function GoalOnboardingForm({ sessionId, userId, onComplete }: GoalOnboardingFormProps) {
   const [loading, setLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   
   // Who
   const [ageGroup, setAgeGroup] = useState('');
@@ -54,7 +55,19 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
         }
       })
       .catch(err => console.error("Failed to load profile", err));
-  }, [userId]);
+
+    // Check if there is an ongoing session
+    axios.get(`${API_URL}/knowledge/chat/${sessionId}`)
+      .then(res => {
+        if (res.data && res.data.data) {
+          const session = res.data.data;
+          if (session.current_stage >= 2 && session.draft_schedule) {
+            setHasDraft(true);
+          }
+        }
+      })
+      .catch(err => console.error("Failed to load session", err));
+  }, [userId, sessionId]);
 
   const handleHourChange = (day: string, val: string) => {
     const num = parseInt(val, 10);
@@ -79,7 +92,6 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       return;
     }
 
-    setLoading(true);
     const formData = {
       "학습자_정보": ageGroup,
       "현재_수준": currentLevel,
@@ -91,17 +103,22 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       "예비일_선호": wantsBuffer
     };
 
+    if (hasDraft) {
+      onComplete(formData);
+      return;
+    }
+
+    setLoading(true);
+
     try {
       await axios.post(`${API_URL}/knowledge/profile`, {
         user_id: userId,
         form_data: formData
       });
 
-      await axios.post(`${API_URL}/knowledge/form_onboard`, {
-        session_id: sessionId,
-        form_data: formData
-      });
-      onComplete(); // 폼 완료 시 상위(App.tsx)에 알림 -> AIChatWizard로 이동
+      // 기존에는 여기서 form_onboard 및 finalize를 호출했으나,
+      // 15단계 개편에 따라 formData만 넘겨주고 Stepper로 제어권을 넘김.
+      onComplete(formData);
     } catch (err) {
       console.error(err);
       alert("진도표 생성 중 오류가 발생했습니다.");
@@ -111,7 +128,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
 
   return (
     <div style={{ maxWidth: '850px', margin: '-30px auto 40px auto', background: '#fff', borderRadius: '30px', padding: '50px 40px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', position: 'relative', zIndex: 10 }}>
-      <h2 style={{ textAlign: 'center', color: '#0b1a6c', marginBottom: '10px', fontSize: '28px', fontWeight: '800' }}>나만의 맞춤형 진도 계획 시작하기</h2>
+      <h2 style={{ textAlign: 'center', color: '#0b1a6c', marginBottom: '10px', fontSize: '28px', fontWeight: '800' }}>목표 및 개인정보 설정</h2>
       <p style={{ textAlign: 'center', color: '#666', marginBottom: '15px' }}>아래 질문지를 작성해주시면, AI가 완벽하게 최적화된 학습 스케줄을 즉시 짜드립니다.</p>
       
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '40px' }}>
@@ -203,7 +220,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
         </div>
 
         <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-          <button type="button" style={{ background: '#bdbdbd', color: '#fff', border: 'none', borderRadius: '30px', width: '60px', height: '60px', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' }}>편집</button>
+          <button type="button" onClick={() => { if(confirm("기존에 작성 중이던 모든 계획표가 삭제되고 처음부터 다시 시작합니다. 계속하시겠습니까?")) { localStorage.removeItem('selfstudy_session_id'); window.location.reload(); } }} style={{ background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '30px', width: '70px', height: '60px', fontSize: '13px', cursor: 'pointer', fontWeight: 'bold' }}>🔄<br/>초기화</button>
           
           <button 
             type="submit" 

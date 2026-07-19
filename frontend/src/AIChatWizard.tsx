@@ -12,9 +12,10 @@ interface AIChatWizardProps {
   sessionId: string;
   rescheduleScheduleId?: string | null;
   onFinalized?: () => void;
+  initialModal?: 'none' | 'subject' | 'unit';
 }
 
-export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinalized }: AIChatWizardProps) {
+export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinalized, initialModal = 'none' }: AIChatWizardProps) {
   const [stage, setStage] = useState<number>(1);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState("");
@@ -25,6 +26,7 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
   const [observerCode, setObserverCode] = useState("");
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [evaluatingTaskInfo, setEvaluatingTaskInfo] = useState<any>(null);
   
   // Tab states
   const [activeSubjectTab, setActiveSubjectTab] = useState<number>(0);
@@ -36,12 +38,6 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
     return localStorage.getItem('selfstudy_hide_strategy_modal_date') !== today;
   });
   const [doNotShowToday, setDoNotShowToday] = useState(false);
-  const [evaluatingTaskInfo, setEvaluatingTaskInfo] = useState<{week_number: number, task_index: number, task_title: string} | null>(null);
-
-  const startEvaluation = (week_number: number, task_index: number, task: any) => {
-    setEvaluatingTaskInfo({ week_number, task_index, task_title: task.task_title });
-    setMessages(prev => [...prev, { role: 'assistant', content: `[평가 모드]\n'${task.task_title}' 단원에 대해 무엇을 학습했는지 자세히 설명해주세요.` }]);
-  };
 
   const handleCloseModal = () => {
     if (doNotShowToday) {
@@ -100,6 +96,11 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
     setLoading(false);
   };
 
+  const startEvaluation = (week_number: number, task_index: number, task: any) => {
+    setEvaluatingTaskInfo({ week_number, task_index, task_title: task.task_title });
+    setMessages(prev => [...prev, { role: 'assistant', content: `[${task.task_title}] 학습 내용을 평가합니다. 배운 내용을 자유롭게 설명해주세요.` }]);
+  };
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -147,6 +148,41 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, draftSchedule]);
+
+  useEffect(() => {
+    if (draftSchedule && initialModal !== 'none') {
+      if (initialModal === 'subject') {
+        openSubjectWeightModal();
+      } else if (initialModal === 'unit') {
+        // Need to make sure activeSubjectTab has units before opening
+        if (draftSchedule?.spreadsheet_data?.subjects?.[activeSubjectTab]?.units) {
+          openUnitWeightModal();
+        }
+      }
+    }
+  }, [draftSchedule, initialModal]);
+
+  useEffect(() => {
+    if (draftSchedule?.curriculum?.length > 0) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      let targetWeek = draftSchedule.curriculum[0].week_number;
+      
+      for (const week of draftSchedule.curriculum) {
+        if (week.daily_tasks && week.daily_tasks.length > 0) {
+          const firstDate = week.daily_tasks[0].date;
+          const lastDate = week.daily_tasks[week.daily_tasks.length - 1].date;
+          if (todayStr >= firstDate && todayStr <= lastDate) {
+            targetWeek = week.week_number;
+            break;
+          } else if (todayStr < firstDate) {
+            // If today is before this week and we haven't found a match yet, it might be the closest upcoming week.
+            // But we'll just stick to targetWeek assignment logic.
+          }
+        }
+      }
+      setActiveWeekTab(targetWeek);
+    }
+  }, [draftSchedule?.curriculum]);
 
   useEffect(() => {
     if (isSpeakerEnabled && messages.length > 0) {
@@ -240,14 +276,13 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
   };
 
   const handleFinalize = async () => {
-    if (!confirm("현재 일정으로 확정하시겠습니까?")) return;
     setLoading(true);
     try {
       const resp = await axios.post(`${API_URL}/knowledge/finalize`, { session_id: sessionId });
       setIsFinalized(true);
       setObserverCode(resp.data.observer_code);
       if (onFinalized) {
-        setTimeout(onFinalized, 3000); // 3초 뒤 대시보드로 이동
+        onFinalized(); // 즉시 대시보드로 이동
       }
     } catch (err) {
       alert("확정 처리 중 오류가 발생했습니다.");
@@ -289,7 +324,9 @@ export default function AIChatWizard({ sessionId, rescheduleScheduleId, onFinali
                   💡 AI 전략 보기
                 </button>
               </div>
-              <h3 style={{ margin: '0 0 20px 0', color: '#1565c0', wordBreak: 'keep-all' }}>{draftSchedule.plan_title || "진도 계획"}</h3>
+              <h3 style={{ margin: '0 0 20px 0', color: '#1565c0', wordBreak: 'keep-all' }}>
+                {initialModal !== 'none' ? '비율(가중치) 설정 중...' : (draftSchedule.plan_title || "진도 계획")}
+              </h3>
               
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #1976d2', paddingBottom: '5px', marginBottom: '10px' }}>

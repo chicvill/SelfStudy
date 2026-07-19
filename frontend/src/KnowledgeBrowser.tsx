@@ -25,7 +25,7 @@ export default function KnowledgeBrowser() {
 
   return (
     <div style={{ maxWidth: '800px', margin: '40px auto', padding: '20px', background: '#f8f9fa', borderRadius: '8px' }}>
-      <h2 style={{ color: '#2e7d32' }}>🔍 지식정보창고 검색 (RAG Database)</h2>
+      <h2 style={{ color: '#2e7d32' }}>📖 지식창고 탐색</h2>
       <p style={{ color: '#666' }}>유사한 태그를 검색하여 과거 수험생들의 목표, 일정, 진도결과를 확인합니다.</p>
       
       <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
