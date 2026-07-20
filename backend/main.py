@@ -234,7 +234,6 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
     user_id = payload.form_data.get("user_id", f"user_{uuid.uuid4().hex[:6]}")
     
     # 1. Goal 저장
-    import uuid
     goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
     tags = ["대화형온보딩", payload.form_data.get("목표", "기본목표")]
     insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=payload.form_data)
@@ -296,10 +295,17 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
             "is_finalized": False
         }
     
-    current_stage = int(session.get("current_stage", 1))
-    chat_history = list(session.get("chat_history", []))
-    collected_data = dict(session.get("collected_data", {}))
-    draft_schedule = dict(session.get("draft_schedule", {}) or {})
+    val_stage = session.get("current_stage")
+    current_stage = int(val_stage) if isinstance(val_stage, (int, str)) else 1
+    
+    val_history = session.get("chat_history")
+    chat_history = list(val_history) if isinstance(val_history, list) else []
+    
+    val_collected = session.get("collected_data")
+    collected_data = dict(val_collected) if isinstance(val_collected, dict) else {}
+    
+    val_draft = session.get("draft_schedule")
+    draft_schedule = dict(val_draft) if isinstance(val_draft, dict) else {}
 
     if session.get("is_finalized"):
         return {"status": "success", "ai_response": "이미 확정된 일정입니다.", "current_stage": current_stage}
@@ -463,20 +469,8 @@ async def evaluate_understanding(payload: EvaluatePayload):
 }}
 """
     try:
-        from ai_engine import gemini_client
-        from google.genai import types
-        if not gemini_client:
-            return {"error": "AI 엔진 미설정"}
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.5
-            )
-        )
-        import json
-        result = json.loads(response.text)
+        from ai_engine import call_llm
+        result = call_llm(prompt=prompt, temperature=0.5)
         return result
     except Exception as e:
         print(f"[EVAL ERR] {e}")

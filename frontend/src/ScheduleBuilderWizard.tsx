@@ -23,10 +23,35 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
   const [targetDateIso, setTargetDateIso] = useState('');
   
   useEffect(() => {
-    // Component mounted, start Step 2: Generate Subjects
-    if (step === 2 && subjects.length === 0) {
-      generateSubjects();
-    }
+    const loadSession = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get(`${API_URL}/knowledge/chat/${sessionId}`);
+        if (res.data.data) {
+          const session = res.data.data;
+          if (session.draft_schedule) {
+            const draft = session.draft_schedule;
+            setPlanTitle(draft.plan_title || "맞춤형 진도 계획");
+            setOverallStrategy(draft.overall_strategy || "");
+            
+            const sheet = draft.spreadsheet_data || draft;
+            if (sheet.subjects && sheet.subjects.length > 0) {
+              setSubjects(sheet.subjects);
+              setTargetDateIso(sheet.target_date_iso || goalData?.마감일);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load session", err);
+      }
+      
+      // Fallback: If no saved subjects, generate them via AI
+      await generateSubjects();
+    };
+    
+    loadSession();
   }, []);
 
   const generateSubjects = async () => {

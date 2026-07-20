@@ -8,12 +8,13 @@ from db import search_knowledge_by_tags
 load_dotenv(find_dotenv(), override=True)
 
 gemini_key = os.getenv("GEMINI_API_KEY")
+gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 gemini_client = None
 
 if gemini_key and not gemini_key.startswith("MY_"):
     try:
         gemini_client = genai.Client(api_key=gemini_key)
-        print("[OK] Gemini AI Engine configured for SelfStudy RAG.")
+        print(f"[OK] Gemini AI Engine configured (Model: {gemini_model}) for SelfStudy RAG.")
     except Exception as e:
         print(f"[WARN] Failed to configure Gemini: {e}")
 
@@ -93,39 +94,113 @@ def _build_context(tags: list):
         return context_text
     return "이전에 비슷한 목표를 가진 수험생 데이터가 없습니다. 일반적인 최상의 전략을 바탕으로 생성해주세요.\n"
 
-def _call_gemini(prompt: str):
-    if not gemini_client:
-        return {"error": "AI 엔진 미설정"}
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.7)
-        )
-        text = response.text.strip()
-        import re
-        
-        # 정규표현식을 사용하여 JSON 블록 추출 시도
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', text, re.DOTALL)
-        if json_match:
-            text = json_match.group(1)
-        else:
-            # 백틱이 없지만 양 끝에 { 나 [ 가 있는 경우
-            text = text.strip()
-            if not ((text.startswith('{') and text.endswith('}')) or (text.startswith('[') and text.endswith(']'))):
-                # JSON 형태가 전혀 아니면 예외를 발생시키기 위해 강제로 빈 괄호를 주거나 그냥 loads하게 둠
-                pass
-                
-        return json.loads(text.strip())
-    except Exception as outer_e:
-        import traceback
-        print(f"[AI ERROR] Exception in _call_gemini: {outer_e}")
-        traceback.print_exc()
+def call_llm(prompt: str | None = None, messages: list | None = None, system_instruction: str | None = None, response_mime_type: str = "application/json", temperature: float = 0.7) -> dict:
+    """
+    Unified LLM caller. Tries Gemini first, falls back to OpenAI if Gemini fails or is rate limited/unsupported.
+    """
+    openai_key = os.getenv("OPENAI_API_KEY")
+    has_openai = openai_key and not openai_key.startswith("MY_")
+    
+    # 1. Try Gemini first
+    if gemini_client:
         try:
-            print(f"[AI ERROR] RAW RESPONSE TEXT: {response.text}")
-        except Exception as inner_e:
-            print(f"[AI ERROR] {inner_e}")
-        return {"error": f"생성 중 오류 발생: {str(outer_e)}"}
+            if messages:
+                # Chat style call
+                response = gemini_client.models.generate_content(
+                    model=gemini_model,
+                    contents=messages,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        response_mime_type=response_mime_type,
+                        temperature=temperature
+                    )
+                )
+            else:
+                # Prompt style call
+                response = gemini_client.models.generate_content(
+                    model=gemini_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type=response_mime_type, 
+                        temperature=temperature
+                    )
+                )
+            
+            raw_text = response.text
+            text = raw_text.strip() if raw_text else ""
+            
+            # Robust JSON extraction
+            import re
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', text, re.DOTALL)
+            if json_match:
+                text = json_match.group(1)
+            else:
+                text = text.strip()
+                
+            return json.loads(text)
+        except Exception as e:
+            print(f"[GEMINI ERROR] Exception: {e}")
+            if not has_openai:
+                return {"error": f"Gemini 오류 및 OpenAI 미설정: {str(e)}"}
+            print("[WARN] Gemini failed. Falling back to OpenAI...")
+    
+    # 2. Fallback to OpenAI
+    if not has_openai:
+        return {"error": "AI 엔진 미설정 (Gemini 실패 및 OpenAI 키 없음)"}
+        
+    import requests
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {openai_key}"
+    }
+    
+    openai_messages = []
+    if system_instruction:
+        openai_messages.append({"role": "system", "content": system_instruction})
+        
+    if messages:
+        # Translate Gemini message format to OpenAI
+        for msg in messages:
+            role = "assistant" if msg["role"] == "model" else msg["role"]
+            text_val = ""
+            if isinstance(msg.get("parts"), list) and len(msg["parts"]) > 0:
+                part = msg["parts"][0]
+                if isinstance(part, dict):
+                    text_val = part.get("text", "")
+                else:
+                    text_val = getattr(part, "text", str(part))
+            else:
+                text_val = str(msg.get("parts", ""))
+            openai_messages.append({"role": role, "content": text_val})
+    else:
+        openai_messages.append({"role": "user", "content": prompt})
+        
+    from typing import Any
+    payload: dict[str, Any] = {
+        "model": "gpt-4o-mini",
+        "messages": openai_messages,
+        "temperature": temperature
+    }
+    if response_mime_type == "application/json":
+        payload["response_format"] = {"type": "json_object"}
+        # OpenAI JSON 모드 검증 통과를 위해 메시지 본문에 'json' 단어를 강제로 추가
+        if openai_messages:
+            openai_messages[-1]["content"] += "\n\nCRITICAL: You must return the response in json format."
+        
+    try:
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        if response.status_code != 200:
+            print(f"[OPENAI ERROR] RAW RESPONSE: {response.text}")
+        response.raise_for_status()
+        res_json = response.json()
+        text = res_json["choices"][0]["message"]["content"]
+        return json.loads(text.strip())
+    except Exception as e:
+        print(f"[OPENAI ERROR] {e}")
+        return {"error": f"AI 호출 오류 (OpenAI): {str(e)}"}
+
+def _call_gemini(prompt: str):
+    return call_llm(prompt=prompt)
 
 def generate_subjects(user_goal: dict, tags: list) -> dict:
     context_text = _build_context(tags)

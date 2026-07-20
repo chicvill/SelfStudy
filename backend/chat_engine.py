@@ -1,6 +1,6 @@
 import json
 from google.genai import types
-from ai_engine import gemini_client
+from ai_engine import gemini_client, gemini_model
 
 def handle_chat_message(session_id: str, current_stage: int, chat_history: list, collected_data: dict, draft_schedule: dict, user_msg: str) -> dict:
     """
@@ -95,16 +95,11 @@ def handle_chat_message(session_id: str, current_stage: int, chat_history: list,
     messages.append({"role": "user", "parts": [{"text": user_msg}]})
 
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=messages,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type="application/json",
-                temperature=0.7
-            )
-        )
-        result = json.loads(response.text)
+        from ai_engine import call_llm
+        result = call_llm(messages=messages, system_instruction=system_prompt, temperature=0.7)
+        
+        if "error" in result:
+            return result
         
         # 상태 업데이트
         new_stage = current_stage + 1 if result.get("stage_complete") else current_stage
