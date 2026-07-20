@@ -17,6 +17,15 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   const [ageGroup, setAgeGroup] = useState('');
   const [currentLevel, setCurrentLevel] = useState('');
   const [managementType, setManagementType] = useState('독학형'); // '독학형' or '관리형'
+  const [scheduledTimes, setScheduledTimes] = useState<Record<string, { in: string; out: string }>>({
+    '월': { in: '09:00', out: '18:00' },
+    '화': { in: '09:00', out: '18:00' },
+    '수': { in: '09:00', out: '18:00' },
+    '목': { in: '09:00', out: '18:00' },
+    '금': { in: '09:00', out: '18:00' },
+    '토': { in: '09:00', out: '18:00' },
+    '일': { in: '09:00', out: '18:00' }
+  });
   
   // What
   const [targetGoal, setTargetGoal] = useState('');
@@ -54,6 +63,9 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
           
           setWantsBuffer(profile['예비일_선호'] !== false);
           setManagementType(profile['관리방식'] || '독학형');
+          if (profile['등하원예약시간']) {
+            setScheduledTimes(profile['등하원예약시간']);
+          }
         }
       })
       .catch(err => console.error("Failed to load profile", err));
@@ -70,6 +82,16 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       })
       .catch(err => console.error("Failed to load session", err));
   }, [userId, sessionId]);
+
+  const handleTimeChange = (day: string, type: 'in' | 'out', val: string) => {
+    setScheduledTimes(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [type]: val
+      }
+    }));
+  };
 
   const handleHourChange = (day: string, val: string) => {
     const num = parseInt(val, 10);
@@ -103,7 +125,8 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       "공부가능요일": activeDays,
       "일일학습시간": hoursPerDayMap,
       "예비일_선호": wantsBuffer,
-      "관리방식": managementType
+      "관리방식": managementType,
+      "등하원예약시간": scheduledTimes
     };
 
     if (hasDraft) {
@@ -139,14 +162,14 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
         <span style={{ margin: '0 15px', color: '#82d7ff' }}>💙</span>
         <div style={{ flex: 1, height: '1px', background: '#eee', maxWidth: '100px' }}></div>
       </div>
-
+ 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
         
         {/* 1. Who */}
         <div style={{ background: '#f4f9ff', padding: '30px', borderRadius: '20px', border: '2px solid #d6e8ff' }}>
           <h3 style={{ margin: '0 0 20px 0', color: '#0b1a6c', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ background: '#4285f4', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>👤</span>
-            1. 나는 누구인가요? (Who)
+            1. 이용자(학생) 정보 (Who)
           </h3>
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '250px' }}>
@@ -226,6 +249,37 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
               ))}
             </div>
           </div>
+
+          {Object.keys(hoursPerDayMap).filter(day => hoursPerDayMap[day] > 0).length > 0 && (
+            <div style={{ marginTop: '20px', background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #ffe0b2' }}>
+              <h4 style={{ margin: '0 0 15px 0', color: '#e65100', fontSize: '15px' }}>⏰ 요일별 입/퇴실 예약 시간 (통제형 출결용)</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {Object.keys(hoursPerDayMap).filter(day => hoursPerDayMap[day] > 0).map(day => (
+                  <div key={day} style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '14px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 'bold', width: '60px' }}>{day}요일</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>입실 예정:</span>
+                      <input 
+                        type="time" 
+                        value={scheduledTimes[day]?.in || '09:00'} 
+                        onChange={e => handleTimeChange(day, 'in', e.target.value)}
+                        style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>퇴실 예정:</span>
+                      <input 
+                        type="time" 
+                        value={scheduledTimes[day]?.out || '18:00'} 
+                        onChange={e => handleTimeChange(day, 'out', e.target.value)}
+                        style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 'bold', color: '#555' }}>

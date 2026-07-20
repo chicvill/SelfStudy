@@ -77,10 +77,38 @@ def init_study_knowledge_db():
                 is_managed BOOLEAN DEFAULT 0,
                 consult_checked BOOLEAN DEFAULT 0,
                 consult_note TEXT DEFAULT '',
+                scheduled_in_time TEXT,
+                scheduled_out_time TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(session_id, date)
             )
         """)
+        
+        # 3자 실시간 메시지 테이블
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS study_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                sender_role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # 스키마 마이그레이션 (컬럼 동적 추가)
+        for col, col_type in [
+            ("scheduled_in_time", "TEXT"),
+            ("scheduled_out_time", "TEXT"),
+            ("consult_start_time", "TEXT"),
+            ("tag_count", "INTEGER DEFAULT 0"),
+            ("tag1_time", "TEXT"),
+            ("tag2_time", "TEXT"),
+            ("tag3_time", "TEXT")
+        ]:
+            try:
+                cur.execute(f"ALTER TABLE attendance ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
         
         # 관리자 계정 기본 세팅 (admin / 1212)
         cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('admin', '1212')")
@@ -93,21 +121,51 @@ def init_study_knowledge_db():
     finally:
         conn.close()
 
-def save_attendance(session_id: str, date: str, check_in_time: str = None, check_out_time: str = None, is_managed: bool = False, consult_checked: bool = False, consult_note: str = ''):
+def save_attendance(
+    session_id: str, 
+    date: str, 
+    check_in_time: str | None = None, 
+    check_out_time: str | None = None, 
+    is_managed: bool = False, 
+    consult_checked: bool = False, 
+    consult_note: str = '', 
+    scheduled_in_time: str | None = None, 
+    scheduled_out_time: str | None = None,
+    consult_start_time: str | None = None,
+    tag_count: int | None = None,
+    tag1_time: str | None = None,
+    tag2_time: str | None = None,
+    tag3_time: str | None = None
+):
     conn = get_db_conn()
     if not conn: return False
     try:
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO attendance (session_id, date, check_in_time, check_out_time, is_managed, consult_checked, consult_note)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO attendance (
+                session_id, date, check_in_time, check_out_time, is_managed, consult_checked, 
+                consult_note, scheduled_in_time, scheduled_out_time, consult_start_time, 
+                tag_count, tag1_time, tag2_time, tag3_time
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, date) DO UPDATE SET
                 check_in_time = COALESCE(excluded.check_in_time, check_in_time),
                 check_out_time = COALESCE(excluded.check_out_time, check_out_time),
                 is_managed = excluded.is_managed,
                 consult_checked = excluded.consult_checked,
-                consult_note = excluded.consult_note
-        """, (session_id, date, check_in_time, check_out_time, 1 if is_managed else 0, 1 if consult_checked else 0, consult_note))
+                consult_note = excluded.consult_note,
+                scheduled_in_time = COALESCE(excluded.scheduled_in_time, scheduled_in_time),
+                scheduled_out_time = COALESCE(excluded.scheduled_out_time, scheduled_out_time),
+                consult_start_time = COALESCE(excluded.consult_start_time, consult_start_time),
+                tag_count = COALESCE(excluded.tag_count, tag_count),
+                tag1_time = COALESCE(excluded.tag1_time, tag1_time),
+                tag2_time = COALESCE(excluded.tag2_time, tag2_time),
+                tag3_time = COALESCE(excluded.tag3_time, tag3_time)
+        """, (
+            session_id, date, check_in_time, check_out_time, 1 if is_managed else 0, 1 if consult_checked else 0, 
+            consult_note, scheduled_in_time, scheduled_out_time, consult_start_time, 
+            tag_count, tag1_time, tag2_time, tag3_time
+        ))
         conn.commit()
         return True
     except Exception as e:
@@ -237,7 +295,7 @@ def get_chat_session(session_id: str):
     finally:
         conn.close()
 
-def save_chat_session(session_id: str, user_id: str, current_stage: int, chat_history: list, collected_data: dict, draft_schedule: dict = None, is_finalized: bool = False):
+def save_chat_session(session_id: str, user_id: str, current_stage: int, chat_history: list, collected_data: dict, draft_schedule: dict | None = None, is_finalized: bool = False):
     conn = get_db_conn()
     if not conn: return False
     try:
@@ -355,6 +413,41 @@ def get_all_user_profiles():
         return results
     except Exception as e:
         print(f"Get All Profiles Error: {e}")
+        return []
+    finally:
+        conn.close()
+
+def save_study_message(session_id: str, sender_role: str, content: str):
+    conn = get_db_conn()
+    if not conn: return False
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO study_messages (session_id, sender_role, content)
+            VALUES (?, ?, ?)
+        """, (session_id, sender_role, content))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Save Message Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_study_messages(session_id: str):
+    conn = get_db_conn()
+    if not conn: return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM study_messages WHERE session_id = ? ORDER BY created_at ASC", (session_id,))
+        rows = cur.fetchall()
+        results = []
+        for r in rows:
+            results.append(dict(r))
+        return results
+    except Exception as e:
+        print(f"Get Messages Error: {e}")
         return []
     finally:
         conn.close()

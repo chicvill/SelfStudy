@@ -636,7 +636,10 @@ async def reschedule_schedule_auto(payload: RescheduleAutoPayload):
             if not week_entry:
                 week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
                 schedule_result.append(week_entry)
-            week_entry["daily_tasks"].extend(daily_tasks)
+            
+            tasks_list = week_entry.get("daily_tasks")
+            if isinstance(tasks_list, list):
+                tasks_list.extend(daily_tasks)
 
     # 6. 완료된 태스크들과 새로 생성된 태스크들 병합
     final_curriculum = []
@@ -800,6 +803,8 @@ class SaveAttendancePayload(BaseModel):
     is_managed: bool = False
     consult_checked: bool = False
     consult_note: str = ''
+    scheduled_in_time: Optional[str] = None
+    scheduled_out_time: Optional[str] = None
 
 @app.get("/knowledge/attendance/{session_id}")
 async def api_get_attendance(session_id: str):
@@ -809,7 +814,35 @@ async def api_get_attendance(session_id: str):
 
 @app.post("/knowledge/attendance")
 async def api_save_attendance(payload: SaveAttendancePayload):
-    from db import save_attendance
+    from db import get_db_conn, save_attendance
+    
+    # 관리자가 수동으로 기입/수정 시 상태머신용 태깅 횟수 및 상담 개시 시간을 지능적으로 자동 보정(Self-Healing)합니다.
+    inferred_tag_count = 0
+    inferred_consult_start = None
+    
+    if payload.check_in_time:
+        inferred_tag_count = 1
+        if payload.check_out_time:
+            if payload.consult_checked:
+                inferred_tag_count = 3
+                inferred_consult_start = payload.check_in_time # 기본 등원 시각으로 채워 경고 해제
+            else:
+                inferred_tag_count = 2
+
+    # 기존 DB 내 기록 확인하여 이미 등록된 상담 시작 시각이 있다면 그대로 유지
+    conn = get_db_conn()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT consult_start_time FROM attendance WHERE session_id = ? AND date = ?", (payload.session_id, payload.date))
+            row = cur.fetchone()
+            if row and row[0]:
+                inferred_consult_start = row[0]
+        except:
+            pass
+        finally:
+            conn.close()
+
     res = save_attendance(
         session_id=payload.session_id,
         date=payload.date,
@@ -817,7 +850,11 @@ async def api_save_attendance(payload: SaveAttendancePayload):
         check_out_time=payload.check_out_time,
         is_managed=payload.is_managed,
         consult_checked=payload.consult_checked,
-        consult_note=payload.consult_note
+        consult_note=payload.consult_note,
+        scheduled_in_time=payload.scheduled_in_time,
+        scheduled_out_time=payload.scheduled_out_time,
+        consult_start_time=inferred_consult_start,
+        tag_count=inferred_tag_count
     )
     if res:
         return {"status": "success", "message": "출석 정보가 업데이트되었습니다."}
@@ -829,6 +866,211 @@ async def api_admin_get_students():
     from db import get_all_user_profiles
     profiles = get_all_user_profiles()
     return {"status": "success", "data": profiles}
+
+class SaveMessagePayload(BaseModel):
+    session_id: str
+    sender_role: str
+    content: str
+
+@app.get("/knowledge/messages/{session_id}")
+async def api_get_messages(session_id: str):
+    from db import get_study_messages
+    msgs = get_study_messages(session_id)
+    return {"status": "success", "data": msgs}
+
+@app.post("/knowledge/messages")
+async def api_save_message(payload: SaveMessagePayload):
+    from db import save_study_message
+    res = save_study_message(payload.session_id, payload.sender_role, payload.content)
+    if res:
+        return {"status": "success", "message": "메시지가 저장되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="메시지 저장 실패")
+
+# 상담실 NFC 태그 이벤트 상태 (인메모리 전역 관리)
+latest_consult_tag = {"session_id": "", "timestamp": 0}
+
+class ConsultTagPayload(BaseModel):
+    session_id: str
+    date: str
+
+@app.post("/knowledge/attendance/consult_tag")
+async def api_consult_tag(payload: ConsultTagPayload):
+    global latest_consult_tag
+    from db import save_attendance
+    import time
+    
+    # 1. 오늘 해당 이용자의 상담 상태를 '완료(consult_checked = 1)'로 출석 저장
+    res = save_attendance(
+        session_id=payload.session_id,
+        date=payload.date,
+        is_managed=True,
+        consult_checked=True
+    )
+    
+    # 2. 전역 이벤트 발행
+    latest_consult_tag = {
+        "session_id": payload.session_id,
+        "timestamp": int(time.time())
+    }
+    
+    if res:
+        return {"status": "success", "message": "상담용 NFC 태깅 기록이 처리되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="상담 NFC 태깅 실패")
+
+@app.get("/knowledge/admin/latest_consult_tag")
+async def api_get_latest_consult_tag():
+    global latest_consult_tag
+    return {"status": "success", "data": latest_consult_tag}
+
+class NfcTagPayload(BaseModel):
+    session_id: str
+    date: str
+
+def is_late_by_10_mins(now_time_str: str, scheduled_in_str: str | None) -> bool:
+    if not scheduled_in_str or not now_time_str:
+        return False
+    try:
+        now_h, now_m = map(int, now_time_str.split(':'))
+        sch_h, sch_m = map(int, scheduled_in_str.split(':'))
+        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m + 10)
+    except:
+        return False
+
+def is_past_exit_time(now_time_str: str, scheduled_out_str: str | None) -> bool:
+    if not scheduled_out_str or not now_time_str:
+        return False
+    try:
+        now_h, now_m = map(int, now_time_str.split(':'))
+        sch_h, sch_m = map(int, scheduled_out_str.split(':'))
+        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m)
+    except:
+        return False
+
+@app.post("/knowledge/attendance/nfc_tag")
+async def api_nfc_tag(payload: NfcTagPayload):
+    global latest_consult_tag
+    from db import get_db_conn, save_attendance
+    from datetime import datetime
+    import time
+    
+    conn = get_db_conn()
+    if not conn:
+        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    
+    now_time_str = datetime.now().strftime("%H:%M")
+    
+    try:
+        # 1. 학생 프로필 및 관리방식, 등하원예약시간 조회
+        cur = conn.cursor()
+        cur.execute("SELECT form_data FROM study_knowledge_bundles WHERE doc_id = ?", (f"profile_{payload.session_id}",))
+        row = cur.fetchone()
+        is_managed = False
+        scheduled_in = None
+        scheduled_out = None
+        
+        if row:
+            import json
+            fd = json.loads(row[0]) if row[0] else {}
+            is_managed = (fd.get("관리방식") == "관리형")
+            
+            days = ['일', '월', '화', '수', '목', '금', '토']
+            day_name = days[datetime.strptime(payload.date, "%Y-%m-%d").weekday()]
+            sched = fd.get("등하원예약시간", {}).get(day_name, {})
+            scheduled_in = sched.get("in")
+            scheduled_out = sched.get("out")
+
+        # 2. 오늘의 출결 정보 조회
+        cur.execute("SELECT check_in_time, check_out_time, consult_start_time, tag_count, tag1_time, tag2_time, tag3_time FROM attendance WHERE session_id = ? AND date = ?", (payload.session_id, payload.date))
+        att = cur.fetchone()
+        
+        # 1단계: 첫 번째 스캔 (tag_count == 0 또는 기록이 없는 경우)
+        if not att or not att[0]:
+            # 10분 이상 지각이면 결석 처리 (상담, 퇴실 없음)
+            is_absent = is_late_by_10_mins(now_time_str, scheduled_in)
+            
+            save_attendance(
+                session_id=payload.session_id,
+                date=payload.date,
+                check_in_time=now_time_str,
+                is_managed=is_managed,
+                scheduled_in_time=scheduled_in,
+                scheduled_out_time=scheduled_out,
+                tag_count=1,
+                tag1_time=now_time_str,
+                consult_note="[결석] 10분 이상 지각으로 자동 결석 처리" if is_absent else ""
+            )
+            if is_absent:
+                return {"status": "success", "tag_type": "absent", "time": now_time_str, "message": f"[{payload.session_id}] 10분 초과 지각으로 결석 처리되었습니다. (상담/퇴장 등록 불가)"}
+            else:
+                return {"status": "success", "tag_type": "check_in", "time": now_time_str, "message": f"[{payload.session_id}] 등원 처리 완료 ({now_time_str})"}
+        
+        check_in, check_out, consult_start, tag_cnt, tag1, tag2, tag3 = att
+        tag_cnt = tag_cnt or 1
+        
+        # 만약 첫 번째 스캔 시 지각으로 결석 처리된 학생이라면 추가 태깅 무시
+        if is_late_by_10_mins(tag1, scheduled_in):
+            return {"status": "success", "tag_type": "absent_blocked", "message": "결석 처리된 학생이므로 추가 태깅을 진행할 수 없습니다."}
+            
+        # 이미 3번 스캔 혹은 하원 완료된 경우 무시
+        if check_out:
+            return {"status": "success", "tag_type": "already_completed", "message": "오늘의 등하원 및 상담 일정이 모두 완료되었습니다."}
+        
+        # 2단계: 두 번째 스캔 (tag_count == 1인 경우)
+        if tag_cnt == 1:
+            # 퇴장 시간이 지났는지 체크
+            if is_past_exit_time(now_time_str, scheduled_out):
+                # 2번만 스캔하고 하원하는 경우 (상담 없음)
+                save_attendance(
+                    session_id=payload.session_id,
+                    date=payload.date,
+                    check_out_time=now_time_str,
+                    is_managed=is_managed,
+                    consult_checked=False, # 상담 없음
+                    tag_count=2,
+                    tag2_time=now_time_str,
+                    consult_note="[상담 미이행] 상담 없이 조기 하원"
+                )
+                return {"status": "success", "tag_type": "check_out_no_consult", "time": now_time_str, "message": f"[{payload.session_id}] 퇴장 시간 초과로 상담 없이 퇴장 처리 완료 ({now_time_str})"}
+            else:
+                # 퇴장 시간 전이므로 2번째 스캔은 '상담 시작 시간'으로 기록
+                save_attendance(
+                    session_id=payload.session_id,
+                    date=payload.date,
+                    is_managed=is_managed,
+                    consult_checked=True, # 상담 진행
+                    consult_start_time=now_time_str,
+                    tag_count=2,
+                    tag2_time=now_time_str
+                )
+                # 관리자 대시보드 자동 포커싱을 위해 consult tag 시간 갱신
+                latest_consult_tag = {
+                    "session_id": payload.session_id,
+                    "timestamp": int(time.time())
+                }
+                return {"status": "success", "tag_type": "consult_start", "time": now_time_str, "message": f"[{payload.session_id}] 퇴실 상담 시작 등록 및 대시보드 연동 완료 ({now_time_str})"}
+        
+        # 3단계: 세 번째 스캔 (tag_count == 2인 경우)
+        if tag_cnt == 2:
+            save_attendance(
+                session_id=payload.session_id,
+                date=payload.date,
+                check_out_time=now_time_str,
+                is_managed=is_managed,
+                tag_count=3,
+                tag3_time=now_time_str
+            )
+            return {"status": "success", "tag_type": "check_out", "time": now_time_str, "message": f"[{payload.session_id}] 최종 하원(퇴장) 처리 완료 ({now_time_str})"}
+            
+        return {"status": "success", "tag_type": "already_completed", "message": "오늘의 등하원 및 상담 일정이 모두 완료되었습니다."}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NFC 통합 태깅 중 오류: {e}")
+    finally:
+        conn.close()
+
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
