@@ -26,7 +26,7 @@ export default function AdminDashboard() {
 
   // Voucher Expiry & Scheduled Times
   const [voucherExpiry, setVoucherExpiry] = useState('');
-  const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string }>>({});
+  const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
 
   // 3-way messaging
   const [messages, setMessages] = useState<any[]>([]);
@@ -583,9 +583,9 @@ export default function AdminDashboard() {
                 <h3 style={{ margin: '0 0 20px 0', color: '#e65100', fontSize: '16px' }}>⏰ 요일별 입퇴실 약속 시간 예약 관리</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                   {daysOfWeek.map(day => {
-                    const scheduled = editScheduledTimes[day] || { in: '09:00', out: '18:00' };
+                    const scheduled = editScheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
                     return (
-                      <div key={day} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+                      <div key={day} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 'bold', width: '50px' }}>{day}요일</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>등원:</span>
@@ -611,6 +611,20 @@ export default function AdminDashboard() {
                             style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
                           />
                         </div>
+                        {isManaged && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ color: '#e65100', fontWeight: 'bold' }}>상담:</span>
+                            <input
+                              type="time"
+                              value={scheduled.consult || '17:30'}
+                              onChange={e => setEditScheduledTimes(prev => ({
+                                ...prev,
+                                [day]: { ...prev[day], consult: e.target.value }
+                              }))}
+                              style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ffcc80', background: '#fff8e1' }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
