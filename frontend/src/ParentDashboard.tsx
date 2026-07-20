@@ -9,6 +9,8 @@ export default function ParentDashboard() {
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [managementType, setManagementType] = useState<string>('독학형');
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +25,22 @@ export default function ParentDashboard() {
       setScheduleData(resp.data.data);
       if (resp.data.data.payload?.spreadsheet_data?.subjects?.length > 0) {
         setSelectedSubject(resp.data.data.payload.spreadsheet_data.subjects[0].subject_name);
+      }
+      
+      const sessId = resp.data.data.payload?.session_id;
+      if (sessId) {
+        try {
+          const attResp = await axios.get(`${API_URL}/knowledge/attendance/${sessId}`);
+          if (attResp.data.status === 'success') {
+            setAttendance(attResp.data.data);
+          }
+          const profResp = await axios.get(`${API_URL}/knowledge/profile/${sessId}`);
+          if (profResp.data.data) {
+            setManagementType(profResp.data.data['관리방식'] || '독학형');
+          }
+        } catch (e) {
+          console.error("Failed to fetch child attendance/profile", e);
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.detail || "코드를 찾을 수 없습니다.");
@@ -129,6 +147,75 @@ export default function ParentDashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* 출석 및 관리 현황 (학부모 참관용) */}
+          <div style={{ marginTop: '30px', background: '#fff', border: '1px solid #ffe082', borderRadius: '8px', padding: '20px' }}>
+            <h4 style={{ margin: '0 0 15px 0', color: '#e65100', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📅 자녀 등하원 및 관리 현황 
+              <span style={{ fontSize: '11px', background: managementType === '관리형' ? '#ffe0b2' : '#e0e0e0', color: managementType === '관리형' ? '#e65100' : '#666', padding: '2px 6px', borderRadius: '4px' }}>
+                {managementType}
+              </span>
+            </h4>
+            
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', background: '#fffde7', padding: '15px 20px', borderRadius: '8px', border: '1px solid #fff59d', marginBottom: '15px' }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '13px', color: '#666' }}>오늘의 등원 정보: </span>
+                <strong style={{ color: '#4caf50' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_in_time ? attendance[0].check_in_time : '미등록'}</strong>
+                <span style={{ margin: '0 15px', color: '#ddd' }}>|</span>
+                <span style={{ fontSize: '13px', color: '#666' }}>오늘의 하원 정보: </span>
+                <strong style={{ color: '#f44336' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_out_time ? attendance[0].check_out_time : '미등록'}</strong>
+              </div>
+              {managementType === '관리형' && (
+                <div style={{ fontSize: '13px', color: '#e65100', fontWeight: 'bold' }}>
+                  {attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_checked ? (
+                    <span>✅ 관리자 5분 메타인지 상담 완료</span>
+                  ) : (
+                    <span>⏳ 상담 진행 대기 중</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {managementType === '관리형' && attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_note && (
+              <div style={{ background: '#fffde7', border: '1px solid #fff59d', padding: '12px 15px', borderRadius: '8px', fontSize: '13px', color: '#b78103', marginBottom: '15px' }}>
+                <strong>오늘의 메타인지 상담 피드백:</strong> {attendance[0].consult_note}
+              </div>
+            )}
+
+            <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ffe082', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead style={{ background: '#fff8e1' }}>
+                  <tr>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ffd54f' }}>날짜</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ffd54f' }}>등원 시간</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ffd54f' }}>하원 시간</th>
+                    {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ffd54f' }}>5분 상담</th>}
+                    {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #ffd54f' }}>피드백</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map(h => (
+                    <tr key={h.id} style={{ borderBottom: '1px solid #fff3e0' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold' }}>{h.date}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#4caf50' }}>{h.check_in_time || '-'}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', color: '#f44336' }}>{h.check_out_time || '-'}</td>
+                      {managementType === '관리형' && (
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', color: h.consult_checked ? 'green' : 'red' }}>
+                          {h.consult_checked ? '완료' : '미완료'}
+                        </td>
+                      )}
+                      {managementType === '관리형' && <td style={{ padding: '8px 12px', color: '#666' }}>{h.consult_note || '-'}</td>}
+                    </tr>
+                  ))}
+                  {attendance.length === 0 && (
+                    <tr>
+                      <td colSpan={managementType === '관리형' ? 5 : 3} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>출석 및 상담 내역이 없습니다.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
           
           <div style={{ textAlign: 'center', marginTop: '30px', color: '#888', fontSize: '13px' }}>

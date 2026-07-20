@@ -476,6 +476,223 @@ async def evaluate_understanding(payload: EvaluatePayload):
         print(f"[EVAL ERR] {e}")
         return {"score": 0, "feedback": "평가 시스템 오류"}
 
+class RescheduleAutoPayload(BaseModel):
+    session_id: str
+
+@app.post("/knowledge/schedule/reschedule_auto")
+async def reschedule_schedule_auto(payload: RescheduleAutoPayload):
+    """진도가 밀렸을 때, 완료된 일정을 보존하고 미완료 일정만 오늘부터 마감일까지 알고리즘 기반 재조정"""
+    # 1. 최신 활성 스케줄 찾기
+    search_tag = f"sess_{payload.session_id}"
+    results = search_knowledge_by_tags([search_tag], limit=10)
+    active_schedule = None
+    for r in results:
+        if r["payload"].get("status") != "superseded":
+            active_schedule = r
+            break
+            
+    if not active_schedule:
+        raise HTTPException(status_code=404, detail="Active schedule not found")
+        
+    sched_payload = active_schedule["payload"]
+    
+    # 2. 완료된 태스크와 미완료 태스크 분리
+    completed_tasks = []
+    uncompleted_tasks = []
+    
+    for week in sched_payload.get("curriculum", []):
+        for task in week.get("daily_tasks", []):
+            if task.get("completed"):
+                completed_tasks.append(task)
+            else:
+                uncompleted_tasks.append(task)
+                
+    if not uncompleted_tasks:
+        return {"status": "success", "message": "재조정할 미완료 일정이 없습니다."}
+        
+    # 3. 미완료 태스크들로부터 과목별 남은 분량(큐) 재구성
+    subject_queues = {}
+    for task in uncompleted_tasks:
+        subj = task["subject"]
+        unit = task["unit_name"]
+        mins = task["estimated_minutes"]
+        
+        if subj not in subject_queues:
+            subject_queues[subj] = []
+            
+        existing_unit = next((u for u in subject_queues[subj] if u["unit_name"] == unit), None)
+        if existing_unit:
+            existing_unit["remaining_mins"] += mins
+        else:
+            subject_queues[subj].append({
+                "unit_name": unit,
+                "remaining_mins": mins,
+                "required_mins": mins
+            })
+            
+    # 4. 오늘부터 목표일까지의 남은 공부 가능 요일 계산
+    session = get_chat_session(payload.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    form_data = session.get("collected_data", {})
+    
+    from datetime import datetime, timedelta
+    start_date = datetime.now()
+    
+    target_date_str = sched_payload.get("target_date_iso") or form_data.get("마감일")
+    try:
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d")
+        if target_date < start_date:
+            target_date = start_date + timedelta(days=30)
+    except:
+        target_date = start_date + timedelta(days=30)
+        
+    day_map = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
+    avail_days_str = form_data.get("공부가능요일", [])
+    avail_days = [day_map[d] for d in avail_days_str if d in day_map]
+    if not avail_days:
+        avail_days = [0, 1, 2, 3, 4]
+        
+    raw_hours = form_data.get("일일학습시간", "2")
+    day_mins_map = {}
+    if isinstance(raw_hours, dict):
+        for day_str, hours in raw_hours.items():
+            if day_str in day_map:
+                try:
+                    day_mins_map[day_map[day_str]] = int(float(hours) * 60)
+                except:
+                    day_mins_map[day_map[day_str]] = 120
+    else:
+        try:
+            default_hours = float(str(raw_hours).replace("시간", "").strip())
+        except:
+            default_hours = 2.0
+        default_mins = int(default_hours * 60)
+        for d in avail_days:
+            day_mins_map[d] = default_mins
+            
+    calendar = []
+    curr_date = start_date
+    while curr_date <= target_date:
+        wd = curr_date.weekday()
+        if wd in avail_days:
+            capacity = day_mins_map.get(wd, 120)
+            calendar.append({"date": curr_date.strftime("%Y-%m-%d"), "day_str": list(day_map.keys())[wd], "capacity": capacity})
+        curr_date += timedelta(days=1)
+        
+    if not calendar:
+        calendar = [{"date": (start_date + timedelta(days=i)).strftime("%Y-%m-%d"), "day_str": "월", "capacity": 120} for i in range(1, 8)]
+
+    # 5. 새로운 달력에 남은 큐 분배
+    schedule_result = []
+    max_completed_week = max([t.get("week_number", 0) for t in completed_tasks]) if completed_tasks else 0
+    week_num = max_completed_week + 1
+    
+    subjects_weights = {s["subject_name"]: s.get("weight_percent", 0)/100.0 for s in sched_payload.get("spreadsheet_data", {}).get("subjects", [])}
+    if not subjects_weights:
+        subjects_weights = {subj: 1.0/len(subject_queues) for subj in subject_queues}
+        
+    for idx, day_info in enumerate(calendar):
+        if idx > 0 and idx % len(avail_days) == 0:
+            week_num += 1
+            
+        daily_tasks = []
+        
+        for subj_name, q in list(subject_queues.items()):
+            subj_w = subjects_weights.get(subj_name, 0.1)
+            alloc_mins = int(day_info["capacity"] * subj_w)
+            
+            while alloc_mins > 0 and q:
+                curr_unit = q[0]
+                if curr_unit["remaining_mins"] <= alloc_mins:
+                    spent = curr_unit["remaining_mins"]
+                    alloc_mins -= spent
+                    daily_tasks.append({
+                        "day": f"Week {week_num} - {day_info['day_str']}",
+                        "date": day_info["date"],
+                        "subject": subj_name,
+                        "unit_name": curr_unit["unit_name"],
+                        "task_title": curr_unit["unit_name"],
+                        "estimated_minutes": spent,
+                        "completed": False
+                    })
+                    q.pop(0)
+                else:
+                    curr_unit["remaining_mins"] -= alloc_mins
+                    daily_tasks.append({
+                        "day": f"Week {week_num} - {day_info['day_str']}",
+                        "date": day_info["date"],
+                        "subject": subj_name,
+                        "unit_name": curr_unit["unit_name"],
+                        "task_title": curr_unit["unit_name"],
+                        "estimated_minutes": alloc_mins,
+                        "completed": False
+                    })
+                    alloc_mins = 0
+                    
+        if daily_tasks:
+            week_entry = next((w for w in schedule_result if w["week_number"] == week_num), None)
+            if not week_entry:
+                week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
+                schedule_result.append(week_entry)
+            week_entry["daily_tasks"].extend(daily_tasks)
+
+    # 6. 완료된 태스크들과 새로 생성된 태스크들 병합
+    final_curriculum = []
+    for week_n in sorted(list(set([t["week_number"] for t in completed_tasks]))):
+        week_tasks = [t for t in completed_tasks if t["week_number"] == week_n]
+        final_curriculum.append({
+            "week_number": week_n,
+            "week_theme": f"{week_n}주차 학습 (완료)",
+            "daily_tasks": week_tasks
+        })
+        
+    final_curriculum.extend(schedule_result)
+    
+    # 7. 새로운 스케줄 문서 저장 및 기존 스케줄 superseded 처리
+    new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
+    
+    active_schedule["payload"]["status"] = "superseded"
+    insert_knowledge(
+        doc_id=active_schedule["doc_id"],
+        domain_type=active_schedule["domain_type"],
+        tags=active_schedule["tags"],
+        payload=active_schedule["payload"]
+    )
+    
+    new_payload = {
+        "plan_title": sched_payload.get("plan_title", "재조정된 진도 계획"),
+        "overall_strategy": sched_payload.get("overall_strategy", ""),
+        "target_date_iso": target_date_str,
+        "observer_code": sched_payload.get("observer_code"),
+        "session_id": payload.session_id,
+        "ref_goal_id": sched_payload.get("ref_goal_id"),
+        "ref_previous_schedule_id": active_schedule["doc_id"],
+        "curriculum": final_curriculum,
+        "spreadsheet_data": sched_payload.get("spreadsheet_data", {})
+    }
+    
+    insert_knowledge(
+        doc_id=new_schedule_id,
+        domain_type="StudySchedule",
+        tags=active_schedule["tags"],
+        payload=new_payload
+    )
+    
+    session["draft_schedule"] = new_payload
+    save_chat_session(
+        session_id=session["session_id"],
+        user_id=session["user_id"],
+        current_stage=session["current_stage"],
+        chat_history=session["chat_history"],
+        collected_data=session["collected_data"],
+        draft_schedule=new_payload,
+        is_finalized=True
+    )
+    
+    return {"status": "success", "message": "미완료 일정이 오늘부터 마감일까지 성공적으로 재조정되었습니다."}
+
 @app.post("/knowledge/chat/reschedule")
 async def start_reschedule(payload: ReschedulePayload):
     """진도가 밀렸을 때, 기존 일정을 바탕으로 Mode 3 (리스케줄링) 대화 시작"""
@@ -574,6 +791,44 @@ async def toggle_task_completion(schedule_id: str, payload: TaskTogglePayload):
     )
     
     return {"status": "success", "message": "진도 상태가 업데이트되었습니다."}
+
+class SaveAttendancePayload(BaseModel):
+    session_id: str
+    date: str
+    check_in_time: Optional[str] = None
+    check_out_time: Optional[str] = None
+    is_managed: bool = False
+    consult_checked: bool = False
+    consult_note: str = ''
+
+@app.get("/knowledge/attendance/{session_id}")
+async def api_get_attendance(session_id: str):
+    from db import get_attendance_history
+    history = get_attendance_history(session_id)
+    return {"status": "success", "data": history}
+
+@app.post("/knowledge/attendance")
+async def api_save_attendance(payload: SaveAttendancePayload):
+    from db import save_attendance
+    res = save_attendance(
+        session_id=payload.session_id,
+        date=payload.date,
+        check_in_time=payload.check_in_time,
+        check_out_time=payload.check_out_time,
+        is_managed=payload.is_managed,
+        consult_checked=payload.consult_checked,
+        consult_note=payload.consult_note
+    )
+    if res:
+        return {"status": "success", "message": "출석 정보가 업데이트되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="출석 정보 저장 실패")
+
+@app.get("/knowledge/admin/students")
+async def api_admin_get_students():
+    from db import get_all_user_profiles
+    profiles = get_all_user_profiles()
+    return {"status": "success", "data": profiles}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

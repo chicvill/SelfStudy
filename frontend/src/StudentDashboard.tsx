@@ -32,6 +32,8 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
 
   // 성취율 상태 (Mocking for now)
   const [achievementRates, setAchievementRates] = useState<Record<string, number>>({});
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [managementType, setManagementType] = useState<string>('독학형');
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,8 +54,34 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
     setLoading(false);
   };
 
+  const fetchAttendance = async () => {
+    try {
+      const resp = await axios.get(`${API_URL}/knowledge/attendance/${sessionId}`);
+      if (resp.data.status === 'success') {
+        setAttendance(resp.data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchProfile = async () => {
+    try {
+      const resp = await axios.get(`${API_URL}/knowledge/profile/${sessionId}`);
+      if (resp.data.data) {
+        setManagementType(resp.data.data['관리방식'] || '독학형');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
-    if (sessionId) fetchSchedule();
+    if (sessionId) {
+      fetchSchedule();
+      fetchAttendance();
+      fetchProfile();
+    }
   }, [sessionId]);
 
   const toggleTask = async (weekNum: number, taskIdx: number, forceCompleted?: boolean) => {
@@ -76,6 +104,25 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleAutoReschedule = async () => {
+    if (!window.confirm("진도가 밀린 미완료 일정만 오늘부터 남은 기간 동안 다시 배정합니다.\n완료한 진도 내역은 안전하게 보존됩니다. 진행하시겠습니까?")) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const resp = await axios.post(`${API_URL}/knowledge/schedule/reschedule_auto`, {
+        session_id: sessionId
+      });
+      alert(resp.data.message);
+      await fetchSchedule();
+    } catch (err: any) {
+      console.error(err);
+      alert("일정 재조정 중 오류가 발생했습니다: " + (err.response?.data?.detail || err.message));
+    }
+    setLoading(false);
   };
 
   const payload = schedule?.payload || {};
@@ -159,6 +206,10 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
 
   const filteredTasks = flatTasks.filter(t => t.subject === selectedSubject);
 
+  const totalTasks = filteredTasks.length;
+  const completedTasksCount = filteredTasks.filter(t => t.completed).length;
+  const progressPercent = totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0;
+
   useEffect(() => {
     if (listContainerRef.current && filteredTasks.length > 0) {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -185,6 +236,28 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
     }
   }, [filteredTasks.length, selectedSubject]);
 
+  const handleSelfCheck = async (type: 'in' | 'out') => {
+    const timeStr = new Date().toTimeString().slice(0, 5); // HH:MM
+    const todayDate = new Date().toISOString().split('T')[0];
+    
+    try {
+      await axios.post(`${API_URL}/knowledge/attendance`, {
+        session_id: sessionId,
+        date: todayDate,
+        check_in_time: type === 'in' ? timeStr : null,
+        check_out_time: type === 'out' ? timeStr : null,
+        is_managed: managementType === '관리형',
+        consult_checked: false,
+        consult_note: ''
+      });
+      alert(`${type === 'in' ? '등원' : '하원'} 완료 처리되었습니다 (${timeStr})`);
+      fetchAttendance();
+    } catch (err) {
+      console.error(err);
+      alert("출석 체크 중 오류가 발생했습니다.");
+    }
+  };
+
   if (loading) return <div style={{ color: '#fff', textAlign: 'center', padding: '50px' }}>일정을 불러오는 중입니다...</div>;
   if (!schedule) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff' }}>확정된 일정이 없습니다. 온보딩을 완료해주세요!</div>;
 
@@ -204,7 +277,7 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
             </div>
           </div>
           <button 
-            onClick={() => onReschedule()}
+            onClick={handleAutoReschedule}
             style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
           >
             🚨 전체 일정 재조정 (AI)
@@ -230,15 +303,28 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
           ))}
         </div>
 
+        {/* 진도 프로그레스 바 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px', background: '#f8f9fa', padding: '10px 15px', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', minWidth: '85px', whiteSpace: 'nowrap' }}>
+            진도율 {progressPercent}%
+          </span>
+          <div style={{ flex: 1, height: '8px', background: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: `${progressPercent}%`, height: '100%', background: '#4caf50', borderRadius: '4px', transition: 'width 0.4s ease' }} />
+          </div>
+          <span style={{ fontSize: '12px', color: '#666', whiteSpace: 'nowrap' }}>
+            ({completedTasksCount} / {totalTasks} 완료)
+          </span>
+        </div>
+
         {/* 스크롤 가능한 일자별 리스트 (정확히 5줄 정도만 보이도록 높이 제한) */}
         <div ref={listContainerRef} style={{ height: '260px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f5f5f5', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 1 }}>
               <tr>
-                <th style={{ padding: '12px 15px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>일자 (요일)</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>배정시간</th>
-                <th style={{ padding: '12px 15px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>단원명</th>
-                <th style={{ padding: '12px 15px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>상태 / 성취율</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>일자 (요일)</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>배정시간</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>단원명</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>상태 / 성취율</th>
               </tr>
             </thead>
             <tbody>
@@ -248,17 +334,17 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
                 const rate = achievementRates[achievementKey] || (isChecked ? 100 : null);
                 
                 return (
-                  <tr key={idx} data-date={task.date} style={{ borderBottom: '1px solid #eee', background: isChecked ? '#fdfdfd' : '#fff', height: '52px' }}>
-                    <td style={{ padding: '12px 15px', color: '#555', fontWeight: 'bold' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
-                    <td style={{ padding: '12px 15px', textAlign: 'center', color: '#666' }}>{task.estimated_minutes}분</td>
-                    <td style={{ padding: '12px 15px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none' }}>{task.unit_name}</td>
-                    <td style={{ padding: '12px 15px', textAlign: 'center' }}>
+                  <tr key={idx} data-date={task.date} style={{ borderBottom: '1px solid #eee', background: isChecked ? '#fdfdfd' : '#fff', height: '42px' }}>
+                    <td style={{ padding: '8px 12px', color: '#555', fontWeight: 'bold' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#666' }}>{task.estimated_minutes}분</td>
+                    <td style={{ padding: '8px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none' }}>{task.unit_name}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                       {isChecked ? (
                         <span style={{ color: '#4caf50', fontWeight: 'bold' }}>성취율: {rate}%</span>
                       ) : (
                         <button 
                           onClick={() => startEvaluation(task.week_number, task.task_index, task)}
-                          style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+                          style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
                         >
                           🎙️ 평가받기
                         </button>
@@ -270,6 +356,96 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
               {filteredTasks.length === 0 && (
                 <tr>
                   <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#999' }}>해당 과목의 일정이 없습니다.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 중단: 출석 및 관리 현황 */}
+      <div style={{ background: '#fff', padding: '20px 30px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+        <h3 style={{ color: '#1976d2', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📅 나의 등하원 및 관리 현황
+          <span style={{ fontSize: '12px', fontWeight: 'normal', padding: '3px 8px', borderRadius: '10px', background: managementType === '관리형' ? '#ffe0b2' : '#e0e0e0', color: managementType === '관리형' ? '#e65100' : '#666' }}>
+            {managementType}
+          </span>
+        </h3>
+
+        {/* 오늘 등하원 체크 및 상태 표시 */}
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', background: '#f8f9fa', padding: '15px 20px', borderRadius: '8px', border: '1px solid #e0e0e0', marginBottom: '15px' }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>오늘의 등원 정보: </span>
+            <strong style={{ color: '#4caf50' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_in_time ? attendance[0].check_in_time : '미등록'}</strong>
+            <span style={{ margin: '0 15px', color: '#ddd' }}>|</span>
+            <span style={{ fontSize: '13px', color: '#666' }}>오늘의 하원 정보: </span>
+            <strong style={{ color: '#f44336' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_out_time ? attendance[0].check_out_time : '미등록'}</strong>
+          </div>
+
+          {managementType === '관리형' ? (
+            <div style={{ fontSize: '13px', color: '#e65100', fontWeight: 'bold' }}>
+              {attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_checked ? (
+                <span>✅ 관리자 5분 메타인지 상담 완료</span>
+              ) : (
+                <span>⏳ 관리자 등하원 및 상담 대기 중</span>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => handleSelfCheck('in')}
+                disabled={attendance[0]?.date === new Date().toISOString().split('T')[0] && !!attendance[0]?.check_in_time}
+                style={{ background: '#4caf50', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+              >
+                🎒 등원 체크
+              </button>
+              <button 
+                onClick={() => handleSelfCheck('out')}
+                disabled={attendance[0]?.date === new Date().toISOString().split('T')[0] && !!attendance[0]?.check_out_time}
+                style={{ background: '#f44336', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+              >
+                🚪 하원 체크
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 특이사항(상담 일지) 표시 */}
+        {managementType === '관리형' && attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_note && (
+          <div style={{ background: '#fff8e1', border: '1px solid #ffe082', padding: '12px 15px', borderRadius: '8px', fontSize: '13px', color: '#b78103', marginBottom: '15px' }}>
+            <strong>오늘의 메타인지 상담 피드백:</strong> {attendance[0].consult_note}
+          </div>
+        )}
+
+        {/* 최근 출석 이력 리스트 */}
+        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead style={{ background: '#f5f5f5', position: 'sticky', top: 0 }}>
+              <tr>
+                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>날짜</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>등원 시간</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>하원 시간</th>
+                {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>5분 상담</th>}
+                {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>피드백</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {attendance.map(h => (
+                <tr key={h.id} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold' }}>{h.date}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#4caf50' }}>{h.check_in_time || '-'}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#f44336' }}>{h.check_out_time || '-'}</td>
+                  {managementType === '관리형' && (
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', color: h.consult_checked ? 'green' : 'red' }}>
+                      {h.consult_checked ? '완료' : '미완료'}
+                    </td>
+                  )}
+                  {managementType === '관리형' && <td style={{ padding: '8px 12px', color: '#666' }}>{h.consult_note || '-'}</td>}
+                </tr>
+              ))}
+              {attendance.length === 0 && (
+                <tr>
+                  <td colSpan={managementType === '관리형' ? 5 : 3} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>출석 및 상담 내역이 없습니다.</td>
                 </tr>
               )}
             </tbody>

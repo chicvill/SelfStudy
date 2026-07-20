@@ -16,6 +16,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   // Who
   const [ageGroup, setAgeGroup] = useState('');
   const [currentLevel, setCurrentLevel] = useState('');
+  const [managementType, setManagementType] = useState('독학형'); // '독학형' or '관리형'
   
   // What
   const [targetGoal, setTargetGoal] = useState('');
@@ -52,6 +53,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
           }
           
           setWantsBuffer(profile['예비일_선호'] !== false);
+          setManagementType(profile['관리방식'] || '독학형');
         }
       })
       .catch(err => console.error("Failed to load profile", err));
@@ -100,7 +102,8 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       "마감일": targetDate,
       "공부가능요일": activeDays,
       "일일학습시간": hoursPerDayMap,
-      "예비일_선호": wantsBuffer
+      "예비일_선호": wantsBuffer,
+      "관리방식": managementType
     };
 
     if (hasDraft) {
@@ -153,6 +156,19 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
             <div style={{ flex: 1, minWidth: '250px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>현재 실력 수준</label>
               <input type="text" placeholder="예: 기초 부족, 토익 600점 수준" value={currentLevel} onChange={e => setCurrentLevel(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ marginTop: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>관리 방식 선택 (필수)</label>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '15px', color: '#555', fontWeight: 'bold' }}>
+                <input type="radio" name="managementType" value="독학형" checked={managementType === '독학형'} onChange={e => setManagementType(e.target.value)} style={{ width: '18px', height: '18px' }} />
+                🎒 독학형 (스스로 학습 관리)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '15px', color: '#555', fontWeight: 'bold' }}>
+                <input type="radio" name="managementType" value="관리형" checked={managementType === '관리형'} onChange={e => setManagementType(e.target.value)} style={{ width: '18px', height: '18px' }} />
+                🏫 관리형 (관리자 상담 및 등하원 시간 체크)
+              </label>
             </div>
           </div>
         </div>

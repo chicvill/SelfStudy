@@ -5,6 +5,7 @@ import ParentDashboard from './ParentDashboard';
 import StudentDashboard from './StudentDashboard';
 import GoalOnboardingForm from './GoalOnboardingForm';
 import Login from './Login';
+import AdminDashboard from './AdminDashboard';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
@@ -13,7 +14,7 @@ const generateSessionId = () => "sess_" + Math.random().toString(36).substr(2, 9
 
 function App() {
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'onboarding' | 'browser' | 'parent' | 'student'>('onboarding');
+  const [currentTab, setCurrentTab] = useState<'onboarding' | 'browser' | 'parent' | 'student' | 'admin'>('onboarding');
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
@@ -39,6 +40,12 @@ function App() {
     setLoggedInUserId(id);
     setSessionId(id); // 사용자의 전화번호를 세션 ID로 사용
     localStorage.setItem("selfstudy_session_id", id);
+    
+    if (id === 'admin') {
+      setIsOnboarded(true);
+      setCurrentTab('admin');
+      return;
+    }
     
     // 로그인 시 기존 스케줄이 있는지 확인하여 있으면 대시보드로 이동
     try {
@@ -146,24 +153,29 @@ function App() {
         
         <h3 style={{ margin: '0 0 20px 0', color: '#1976d2' }}>메뉴</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <button onClick={() => handleMenuClick('student', true)} style={sidebarButtonStyle(currentTab === 'student')}>📈 나의 대시보드</button>
-          <button onClick={() => handleMenuClick('onboarding', false)} style={sidebarButtonStyle(currentTab === 'onboarding' && !isOnboarded)}>📝 목표 및 개인정보 설정</button>
-          
-          <div style={{ padding: '10px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <p style={{ margin: 0, fontSize: '13px', color: '#999', fontWeight: 'bold' }}>비율(가중치) 수정</p>
-            <button 
-              onClick={() => activeScheduleId ? handleReschedule() : alert('확정된 일정이 없습니다.')} 
-              style={sidebarButtonStyle(false)}
-            >
-              ⚖️ 과목별 비율 설정
-            </button>
-            <button 
-              onClick={() => activeScheduleId ? handleReschedule() : alert('확정된 일정이 없습니다.')} 
-              style={sidebarButtonStyle(false)}
-            >
-              ⚖️ 단원별 비율 설정
-            </button>
-          </div>
+          {loggedInUserId === 'admin' ? (
+            <button onClick={() => handleMenuClick('admin', true)} style={sidebarButtonStyle(currentTab === 'admin')}>🏫 관리 대시보드</button>
+          ) : (
+            <>
+              <button onClick={() => handleMenuClick('student', true)} style={sidebarButtonStyle(currentTab === 'student')}>📈 나의 대시보드</button>
+              <button onClick={() => handleMenuClick('onboarding', false)} style={sidebarButtonStyle(currentTab === 'onboarding' && !isOnboarded)}>📝 목표 및 개인정보 설정</button>
+              
+              <div style={{ padding: '10px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <button 
+                  onClick={() => activeScheduleId ? handleReschedule() : alert('확정된 일정이 없습니다.')} 
+                  style={sidebarButtonStyle(false)}
+                >
+                  ⚖️ 과목별 학습량 비율(가중치) 설정
+                </button>
+                <button 
+                  onClick={() => activeScheduleId ? handleReschedule() : alert('확정된 일정이 없습니다.')} 
+                  style={sidebarButtonStyle(false)}
+                >
+                  ⚖️ 단원별 학습량 비율(가중치) 설정
+                </button>
+              </div>
+            </>
+          )}
           
           <button onClick={() => handleMenuClick('browser', true)} style={sidebarButtonStyle(currentTab === 'browser')}>📖 지식창고 탐색</button>
           <button onClick={() => handleMenuClick('parent', true)} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관</button>
@@ -200,6 +212,7 @@ function App() {
         {currentTab === 'student' && <StudentDashboard sessionId={sessionId} onReschedule={handleReschedule} />}
         {currentTab === 'browser' && <KnowledgeBrowser />}
         {currentTab === 'parent' && <ParentDashboard />}
+        {currentTab === 'admin' && <AdminDashboard />}
       </main>
     </div>
   );

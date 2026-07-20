@@ -66,6 +66,22 @@ def init_study_knowledge_db():
             )
         """)
         
+        # 출석체크 테이블
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                check_in_time TEXT,
+                check_out_time TEXT,
+                is_managed BOOLEAN DEFAULT 0,
+                consult_checked BOOLEAN DEFAULT 0,
+                consult_note TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(session_id, date)
+            )
+        """)
+        
         # 관리자 계정 기본 세팅 (admin / 1212)
         cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('admin', '1212')")
         
@@ -74,6 +90,50 @@ def init_study_knowledge_db():
     except Exception as e:
         conn.rollback()
         print(f"[ERR] Study DB Init Error: {e}")
+    finally:
+        conn.close()
+
+def save_attendance(session_id: str, date: str, check_in_time: str = None, check_out_time: str = None, is_managed: bool = False, consult_checked: bool = False, consult_note: str = ''):
+    conn = get_db_conn()
+    if not conn: return False
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO attendance (session_id, date, check_in_time, check_out_time, is_managed, consult_checked, consult_note)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, date) DO UPDATE SET
+                check_in_time = COALESCE(excluded.check_in_time, check_in_time),
+                check_out_time = COALESCE(excluded.check_out_time, check_out_time),
+                is_managed = excluded.is_managed,
+                consult_checked = excluded.consult_checked,
+                consult_note = excluded.consult_note
+        """, (session_id, date, check_in_time, check_out_time, 1 if is_managed else 0, 1 if consult_checked else 0, consult_note))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Save Attendance Error: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_attendance_history(session_id: str):
+    conn = get_db_conn()
+    if not conn: return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM attendance WHERE session_id = ? ORDER BY date DESC", (session_id,))
+        rows = cur.fetchall()
+        results = []
+        for r in rows:
+            rd = dict(r)
+            rd['is_managed'] = bool(rd['is_managed'])
+            rd['consult_checked'] = bool(rd['consult_checked'])
+            results.append(rd)
+        return results
+    except Exception as e:
+        print(f"Get Attendance Error: {e}")
+        return []
     finally:
         conn.close()
 
@@ -276,5 +336,25 @@ def get_user_profile(user_id: str):
     except Exception as e:
         print(f"Get Profile Error: {e}")
         return {}
+    finally:
+        conn.close()
+
+def get_all_user_profiles():
+    conn = get_db_conn()
+    if not conn: return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM user_profiles")
+        rows = cur.fetchall()
+        results = []
+        for r in rows:
+            rd = dict(r)
+            if rd.get('form_data'):
+                rd['form_data'] = json.loads(rd['form_data'])
+            results.append(rd)
+        return results
+    except Exception as e:
+        print(f"Get All Profiles Error: {e}")
+        return []
     finally:
         conn.close()
