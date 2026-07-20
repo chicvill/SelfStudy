@@ -6,15 +6,50 @@ import uvicorn
 from pydantic import BaseModel
 from typing import List, Optional
 
-from db import init_study_knowledge_db, insert_knowledge, search_knowledge_by_tags, get_chat_session, save_chat_session
-from ai_engine import generate_rag_curriculum
-from chat_engine import handle_chat_message
+from db import DatabaseManager, UserRepository, KnowledgeRepository, ChatSessionRepository, AttendanceRepository, MessageRepository
+from ai_engine import AITutor
+from scheduler import Scheduler
+from chat_engine import ChatEngine
+
+class AppContext:
+    def __init__(self):
+        self.db_manager = DatabaseManager()
+        
+        # Repositories
+        self.user_repo = UserRepository(self.db_manager)
+        self.knowledge_repo = KnowledgeRepository(self.db_manager)
+        self.chat_repo = ChatSessionRepository(self.db_manager)
+        self.attendance_repo = AttendanceRepository(self.db_manager)
+        self.message_repo = MessageRepository(self.db_manager)
+        
+        # Services & Engines
+        self.ai_tutor = AITutor(self.knowledge_repo)
+        self.scheduler = Scheduler()
+        self.chat_engine = ChatEngine(self.ai_tutor)
+
+    def get_latest_consult_tag(self) -> dict:
+        """NFC 상담 태그 상태 조회 (DB 기반 - 프로세스 세이프)"""
+        doc = self.knowledge_repo.get_knowledge("latest_consult_tag")
+        if doc and doc.get("payload"):
+            return doc["payload"]
+        return {"session_id": "", "timestamp": 0}
+
+    def save_latest_consult_tag(self, session_id: str, timestamp: int) -> bool:
+        """NFC 상담 태그 상태 저장 (DB 기반 - 프로세스 세이프)"""
+        payload = {"session_id": session_id, "timestamp": timestamp}
+        return self.knowledge_repo.insert_knowledge(
+            doc_id="latest_consult_tag",
+            domain_type="GlobalState",
+            tags=["latest_consult_tag"],
+            payload=payload
+        )
+
+# Initialize context
+context = AppContext()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 서버 기동 시 NoSQL형 지식정보창고 테이블 셋업
-    print("[INFO] Initializing Knowledge Base...")
-    init_study_knowledge_db()
+    print("[INFO] Initializing App Context (and Knowledge Base)...")
     yield
 
 app = FastAPI(
@@ -31,44 +66,131 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ----------------- BaseModels for payloads -----------------
+
 class GoalPayload(BaseModel):
     tags: List[str]
     goal_details: dict
 
-@app.post("/knowledge/goal")
-async def create_goal_and_schedule(payload: GoalPayload, background_tasks: BackgroundTasks):
-    """
-    1. 수험생의 새로운 목표를 지식정보창고에 저장
-    2. 비동기로 과거 지식 검색(RAG) 후 AI 스케줄 생성하여 저장
-    """
-    # 1. 원본 목표 지식 저장
-    goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
-    success = insert_knowledge(
-        doc_id=goal_id,
-        domain_type="GoalSetting",
-        tags=payload.tags,
-        payload=payload.goal_details
-    )
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to save goal to Knowledge Base")
-        
-    # 2. 비동기 RAG 파이프라인 트리거
-    background_tasks.add_task(_background_rag_scheduler, goal_id, payload.goal_details, payload.tags)
-    
-    return {"status": "success", "message": "목표가 지식창고에 저장되었습니다. AI가 과거 지식을 검색하여 최적의 일정을 생성 중입니다.", "goal_id": goal_id}
+class FormOnboardPayload(BaseModel):
+    session_id: str
+    form_data: dict
 
-def _background_rag_scheduler(goal_id: str, goal_details: dict, tags: list):
-    """백그라운드에서 실행되는 RAG 기반 일정 생성 로직"""
+class AuthPayload(BaseModel):
+    user_id: str
+    password: str
+
+class ProfilePayload(BaseModel):
+    user_id: str
+    form_data: dict
+
+class GenSubjectsPayload(BaseModel):
+    user_goal: dict
+    tags: list
+
+class GenSubjectWeightsPayload(BaseModel):
+    subjects: list
+    user_goal: dict
+
+class GenUnitsPayload(BaseModel):
+    subjects: list
+    user_goal: dict
+
+class GenUnitWeightsPayload(BaseModel):
+    subjects_with_units: list
+    user_goal: dict
+
+class GenerateScheduleFinalPayload(BaseModel):
+    form_data: dict
+    ai_draft: dict
+    session_id: str
+
+class ChatPayload(BaseModel):
+    session_id: str
+    message: str
+
+class FinalizePayload(BaseModel):
+    session_id: str
+
+class UpdateWeightsPayload(BaseModel):
+    session_id: str
+    new_spreadsheet_data: dict
+
+class ReschedulePayload(BaseModel):
+    session_id: str
+    schedule_id: str
+
+class EvaluatePayload(BaseModel):
+    session_id: str
+    subject: str
+    explanation: str
+
+class RescheduleAutoPayload(BaseModel):
+    session_id: str
+
+class SaveAttendancePayload(BaseModel):
+    session_id: str
+    date: str
+    check_in_time: Optional[str] = None
+    check_out_time: Optional[str] = None
+    is_managed: bool = False
+    consult_checked: bool = False
+    consult_note: str = ''
+    scheduled_in_time: Optional[str] = None
+    scheduled_out_time: Optional[str] = None
+
+class SaveMessagePayload(BaseModel):
+    session_id: str
+    sender_role: str
+    content: str
+
+class ConsultTagPayload(BaseModel):
+    session_id: str
+    date: str
+
+class NfcTagPayload(BaseModel):
+    session_id: str
+    date: str
+
+class TaskTogglePayload(BaseModel):
+    week_number: int
+    task_index: int
+    completed: bool
+
+# ----------------- Helper Functions -----------------
+
+def is_late_by_10_mins(now_time_str: str, scheduled_in_str: str | None) -> bool:
+    if not scheduled_in_str or not now_time_str:
+        return False
+    try:
+        now_h, now_m = map(int, now_time_str.split(':'))
+        sch_h, sch_m = map(int, scheduled_in_str.split(':'))
+        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m + 10)
+    except:
+        return False
+
+def is_past_exit_time(now_time_str: str, scheduled_out_str: str | None) -> bool:
+    if not scheduled_out_str or not now_time_str:
+        return False
+    try:
+        now_h, now_m = map(int, now_time_str.split(':'))
+        sch_h, sch_m = map(int, scheduled_out_str.split(':'))
+        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m)
+    except:
+        return False
+
+async def _background_rag_scheduler(goal_id: str, goal_details: dict, tags: list):
+    """백그라운드에서 비동기로 실행되는 RAG 기반 일정 생성 로직"""
     print(f"[RAG] Generating curriculum for Goal: {goal_id} with tags: {tags}")
     
-    # AI 엔진 호출 (내부적으로 지식정보창고 검색 수행)
-    generated_schedule = generate_rag_curriculum(goal_details, tags)
+    # AI 엔진 호출 (비동기)
+    generated_schedule = await context.ai_tutor.generate_rag_curriculum(goal_details, tags)
     
     if "error" in generated_schedule:
         print(f"[RAG ERR] {generated_schedule['error']}")
         return
         
-    # 학부모 공유용 관찰자 코드(Observer Code) 생성
+    # 학부모 공유용 관찰자 코드 생성
     import random, string
     observer_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     
@@ -79,10 +201,9 @@ def _background_rag_scheduler(goal_id: str, goal_details: dict, tags: list):
     generated_schedule["ref_goal_id"] = goal_id 
     generated_schedule["observer_code"] = observer_code
     
-    # tags에 'obs_코드'를 넣어 나중에 빠르게 검색 가능하도록 함
     new_tags = tags + ["초기스케줄", f"obs_{observer_code}"]
     
-    insert_knowledge(
+    context.knowledge_repo.insert_knowledge(
         doc_id=schedule_id,
         domain_type="StudySchedule",
         tags=new_tags,
@@ -90,35 +211,48 @@ def _background_rag_scheduler(goal_id: str, goal_details: dict, tags: list):
     )
     print(f"[RAG] Successfully created StudySchedule: {schedule_id} with Observer Code: {observer_code}")
 
+
+# ----------------- FastAPI Endpoints -----------------
+
+@app.post("/knowledge/goal")
+async def create_goal_and_schedule(payload: GoalPayload, background_tasks: BackgroundTasks):
+    """
+    1. 수험생의 새로운 목표를 지식정보창고에 저장
+    2. 비동기로 과거 지식 검색(RAG) 후 AI 스케줄 생성하여 저장
+    """
+    goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
+    success = context.knowledge_repo.insert_knowledge(
+        doc_id=goal_id,
+        domain_type="GoalSetting",
+        tags=payload.tags,
+        payload=payload.goal_details
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save goal to Knowledge Base")
+        
+    # 비동기 RAG 파이프라인 트리거
+    background_tasks.add_task(_background_rag_scheduler, goal_id, payload.goal_details, payload.tags)
+    
+    return {"status": "success", "message": "목표가 지식창고에 저장되었습니다. AI가 과거 지식을 검색하여 최적의 일정을 생성 중입니다.", "goal_id": goal_id}
+
 @app.get("/knowledge/search")
 async def search_knowledge(tags: str):
     """주어진 태그 리스트(콤마 분리)로 지식정보창고 검색"""
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-    results = search_knowledge_by_tags(tag_list, limit=10)
+    results = context.knowledge_repo.search_knowledge_by_tags(tag_list, limit=10)
     return {"status": "success", "data": results}
-
-class FormOnboardPayload(BaseModel):
-    session_id: str
-    form_data: dict
-
-class AuthPayload(BaseModel):
-    user_id: str
-    password: str
-
-from db import register_user, verify_user, save_user_profile, get_user_profile
 
 @app.post("/knowledge/signup")
 async def signup(payload: AuthPayload):
-    success = register_user(payload.user_id, payload.password)
+    success = context.user_repo.register_user(payload.user_id, payload.password)
     if success:
         return {"status": "success", "success": True, "message": "User registered successfully"}
     else:
-        # FastAPI HTTP exception can be caught by axios, let's just return a dict with success: false for the frontend
         return {"status": "error", "success": False, "message": "User ID already exists or failed to register"}
 
 @app.post("/knowledge/login")
 async def login(payload: AuthPayload):
-    success = verify_user(payload.user_id, payload.password)
+    success = context.user_repo.verify_user(payload.user_id, payload.password)
     if success:
         return {"status": "success", "success": True, "message": "Login successful"}
     else:
@@ -126,34 +260,27 @@ async def login(payload: AuthPayload):
 
 @app.get("/knowledge/profile/{user_id}")
 async def get_profile(user_id: str):
-    profile_data = get_user_profile(user_id)
+    profile_data = context.user_repo.get_user_profile(user_id)
     return {"status": "success", "data": profile_data}
-
-class ProfilePayload(BaseModel):
-    user_id: str
-    form_data: dict
 
 @app.post("/knowledge/profile")
 async def save_profile(payload: ProfilePayload):
-    success = save_user_profile(payload.user_id, payload.form_data)
+    success = context.user_repo.save_user_profile(payload.user_id, payload.form_data)
     if success:
         return {"status": "success", "message": "Profile saved successfully"}
     return {"status": "error", "message": "Failed to save profile"}
 
-from scheduler import calculate_schedule
-
 @app.post("/knowledge/form_onboard")
 async def onboard_via_form(payload: FormOnboardPayload):
-    """질문지(Form) 데이터를 받아 즉시 Mode 2 세션을 만들고 초안을 생성함 (기존 레거시)"""
+    """질문지(Form) 데이터를 받아 즉시 세션을 만들고 초안을 생성함"""
     user_id = f"user_{uuid.uuid4().hex[:6]}"
-    
     tags = ["대화형온보딩", payload.form_data.get("goal", "기본목표")]
     
-    # 1. AI를 통한 과목/단원 및 배분율(%) 추출
-    ai_draft = generate_rag_curriculum(payload.form_data, tags)
+    # 1. AI를 통한 과목/단원 및 배분율(%) 추출 (비동기)
+    ai_draft = await context.ai_tutor.generate_rag_curriculum(payload.form_data, tags)
     
     # 2. 알고리즘을 이용한 정밀 캘린더 스케줄링
-    draft = calculate_schedule(payload.form_data, ai_draft)
+    draft = context.scheduler.calculate_schedule(payload.form_data, ai_draft)
     
     ai_greeting = "작성해주신 질문지를 바탕으로 100% 맞춤형 초안 진도표를 생성했습니다! 🎉\n\n좌측의 스케줄을 확인해 보시고, 수정하고 싶은 부분을 우측 채팅창에 편하게 말씀해 주세요. (예: 일요일은 쉬게 해줘, 방정식 단원에 시간 더 배정해줘)"
     
@@ -162,7 +289,7 @@ async def onboard_via_form(payload: FormOnboardPayload):
         {"role": "assistant", "content": ai_greeting}
     ]
     
-    save_chat_session(
+    context.chat_repo.save_chat_session(
         session_id=payload.session_id,
         user_id=user_id,
         current_stage=2,
@@ -179,52 +306,29 @@ async def onboard_via_form(payload: FormOnboardPayload):
         "draft_schedule": draft
     }
 
-from ai_engine import generate_subjects, generate_subject_weights, generate_units, generate_unit_weights
-
-class GenSubjectsPayload(BaseModel):
-    user_goal: dict
-    tags: list
-
 @app.post("/knowledge/generate_subjects")
 async def api_generate_subjects(payload: GenSubjectsPayload):
-    res = generate_subjects(payload.user_goal, payload.tags)
+    res = await context.ai_tutor.generate_subjects(payload.user_goal, payload.tags)
     return {"status": "success", "data": res}
-
-class GenSubjectWeightsPayload(BaseModel):
-    subjects: list
-    user_goal: dict
 
 @app.post("/knowledge/generate_subject_weights")
 async def api_generate_subject_weights(payload: GenSubjectWeightsPayload):
-    res = generate_subject_weights(payload.subjects, payload.user_goal)
+    res = await context.ai_tutor.generate_subject_weights(payload.subjects, payload.user_goal)
     return {"status": "success", "data": res}
-
-class GenUnitsPayload(BaseModel):
-    subjects: list
-    user_goal: dict
 
 @app.post("/knowledge/generate_units")
 async def api_generate_units(payload: GenUnitsPayload):
-    res = generate_units(payload.subjects, payload.user_goal)
+    res = await context.ai_tutor.generate_units(payload.subjects, payload.user_goal)
     return {"status": "success", "data": res}
-
-class GenUnitWeightsPayload(BaseModel):
-    subjects_with_units: list
-    user_goal: dict
 
 @app.post("/knowledge/generate_unit_weights")
 async def api_generate_unit_weights(payload: GenUnitWeightsPayload):
-    res = generate_unit_weights(payload.subjects_with_units, payload.user_goal)
+    res = await context.ai_tutor.generate_unit_weights(payload.subjects_with_units, payload.user_goal)
     return {"status": "success", "data": res}
-
-class GenerateScheduleFinalPayload(BaseModel):
-    form_data: dict
-    ai_draft: dict
-    session_id: str
 
 @app.post("/knowledge/generate_schedule_final")
 async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
-    draft = calculate_schedule(payload.form_data, payload.ai_draft)
+    draft = context.scheduler.calculate_schedule(payload.form_data, payload.ai_draft)
     
     chat_history = [
         {"role": "user", "content": "[시스템: 단계별 스케줄 생성이 완료되었습니다.]"},
@@ -236,7 +340,7 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
     # 1. Goal 저장
     goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
     tags = ["대화형온보딩", payload.form_data.get("목표", "기본목표")]
-    insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=payload.form_data)
+    context.knowledge_repo.insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=payload.form_data)
     
     # 2. Schedule 저장 및 Observer Code 발급
     import random, string
@@ -250,17 +354,17 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
     
     # 만약 기존에 일정이 있었다면 superseded 처리 (리스케줄링 대비)
     search_tag = f"sess_{payload.session_id}"
-    old_results = search_knowledge_by_tags([search_tag], limit=5)
+    old_results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=5)
     for old_doc in old_results:
         if old_doc["payload"].get("status") != "superseded":
             old_doc["payload"]["status"] = "superseded"
-            insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+            context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
             draft["ref_previous_schedule_id"] = old_doc["doc_id"]
             break
 
-    insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
+    context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
     
-    save_chat_session(
+    context.chat_repo.save_chat_session(
         session_id=payload.session_id,
         user_id=user_id,
         current_stage=3,
@@ -272,15 +376,10 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
     
     return {"status": "success", "draft_schedule": draft}
 
-
-class ChatPayload(BaseModel):
-    session_id: str
-    message: str
-
 @app.post("/knowledge/chat")
 async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     """대화형 온보딩 마법사 채팅 엔드포인트"""
-    session = get_chat_session(payload.session_id)
+    session = context.chat_repo.get_chat_session(payload.session_id)
     
     if not session:
         # 새 세션 생성
@@ -310,8 +409,8 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     if session.get("is_finalized"):
         return {"status": "success", "ai_response": "이미 확정된 일정입니다.", "current_stage": current_stage}
 
-    # AI 상태 머신 호출
-    ai_result = handle_chat_message(
+    # AI 상태 머신 호출 (비동기)
+    ai_result = await context.chat_engine.handle_chat_message(
         session_id=payload.session_id,
         current_stage=current_stage,
         chat_history=chat_history,
@@ -336,19 +435,19 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     if current_stage == 2 and "new_spreadsheet_data" in ai_result:
         # AI가 변경한 스프레드시트 배분율을 기반으로 새로운 스케줄을 다시 계산함!
         updated_spreadsheet = ai_result["new_spreadsheet_data"]
-        new_draft_schedule = calculate_schedule(new_collected_data, updated_spreadsheet)
+        new_draft_schedule = context.scheduler.calculate_schedule(new_collected_data, updated_spreadsheet)
     else:
         new_draft_schedule = ai_result.get("new_draft_schedule", session.get("draft_schedule"))
 
-    # Mode 1(목표 설정)에서 Mode 2(초안 편집)로 막 넘어간 경우: 즉시 초안(RAG) 생성
+    # Mode 1(목표 설정)에서 Mode 2(초안 편집)로 막 넘어간 경우: 즉시 초안 생성 (비동기)
     if current_stage == 1 and new_stage == 2:
         tags = ["대화형온보딩", new_collected_data.get("목표", "기본목표")]
-        ai_draft = generate_rag_curriculum(new_collected_data, tags)
-        new_draft_schedule = calculate_schedule(new_collected_data, ai_draft)
+        ai_draft = await context.ai_tutor.generate_rag_curriculum(new_collected_data, tags)
+        new_draft_schedule = context.scheduler.calculate_schedule(new_collected_data, ai_draft)
         ai_result["ai_response"] += "\n\n🎉 목표가 파악되었습니다! 화면 좌측에 AI가 생성한 '초안 일정'을 띄워드렸어요. 수정하고 싶은 부분이 있다면 저에게 편하게 말씀해 주세요. (예: 주말 일정은 삭제해 줘)"
 
     # 세션 DB 저장
-    save_chat_session(
+    context.chat_repo.save_chat_session(
         session_id=payload.session_id,
         user_id=str(session.get("user_id", "")),
         current_stage=int(new_stage),
@@ -366,13 +465,10 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
         "draft_schedule": new_draft_schedule
     }
 
-class FinalizePayload(BaseModel):
-    session_id: str
-
 @app.post("/knowledge/finalize")
 async def finalize_schedule(payload: FinalizePayload):
     """수험생이 수정을 마치고 [이 계획으로 확정하기] 버튼을 누름"""
-    session = get_chat_session(payload.session_id)
+    session = context.chat_repo.get_chat_session(payload.session_id)
     if not session or session.get("is_finalized"):
         raise HTTPException(status_code=400, detail="유효하지 않은 세션이거나 이미 확정되었습니다.")
         
@@ -382,7 +478,7 @@ async def finalize_schedule(payload: FinalizePayload):
     # 1. Goal 저장
     goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
     tags = ["대화형온보딩", collected_data.get("목표", "기본목표")]
-    insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=collected_data)
+    context.knowledge_repo.insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=collected_data)
     
     # 2. Schedule 저장 및 Observer Code 발급
     import random, string
@@ -396,39 +492,35 @@ async def finalize_schedule(payload: FinalizePayload):
     
     # 만약 Mode 3(리스케줄링) 확정이었다면, 기존 활성 일정을 찾아 superseded 처리함
     search_tag = f"sess_{payload.session_id}"
-    old_results = search_knowledge_by_tags([search_tag], limit=5)
+    old_results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=5)
     for old_doc in old_results:
         if old_doc["payload"].get("status") != "superseded":
             old_doc["payload"]["status"] = "superseded"
-            insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+            context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
             draft_schedule["ref_previous_schedule_id"] = old_doc["doc_id"]
             break
 
-    insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft_schedule)
+    context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft_schedule)
     
-    # 세션 확정 처리 (완료된 후에는 Mode 3를 위해 상태를 유지할 수도 있으나, 일단은 is_finalized=True)
-    save_chat_session(session["session_id"], session["user_id"], session["current_stage"], session["chat_history"], collected_data, draft_schedule, True)
+    # 세션 확정 처리
+    context.chat_repo.save_chat_session(session["session_id"], session["user_id"], session["current_stage"], session["chat_history"], collected_data, draft_schedule, True)
     
     return {"status": "success", "message": "성공적으로 확정되었습니다.", "observer_code": observer_code}
-
-class UpdateWeightsPayload(BaseModel):
-    session_id: str
-    new_spreadsheet_data: dict
 
 @app.post("/knowledge/schedule/update_weights")
 async def update_schedule_weights(payload: UpdateWeightsPayload):
     """사용자가 직접 UI에서 과목/단원 비중을 조절했을 때 스케줄을 재계산"""
-    session = get_chat_session(payload.session_id)
+    session = context.chat_repo.get_chat_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
         
     collected_data = session.get("collected_data", {})
     
     # 새로운 스프레드시트 기반으로 스케줄 재계산
-    new_draft_schedule = calculate_schedule(collected_data, payload.new_spreadsheet_data)
+    new_draft_schedule = context.scheduler.calculate_schedule(collected_data, payload.new_spreadsheet_data)
     
     # 세션에 저장
-    save_chat_session(
+    context.chat_repo.save_chat_session(
         session_id=session["session_id"],
         user_id=session["user_id"],
         current_stage=session["current_stage"],
@@ -443,15 +535,6 @@ async def update_schedule_weights(payload: UpdateWeightsPayload):
         "message": "진도표가 성공적으로 재조정되었습니다.",
         "draft_schedule": new_draft_schedule
     }
-
-class ReschedulePayload(BaseModel):
-    session_id: str
-    schedule_id: str
-
-class EvaluatePayload(BaseModel):
-    session_id: str
-    subject: str
-    explanation: str
 
 @app.post("/knowledge/evaluate")
 async def evaluate_understanding(payload: EvaluatePayload):
@@ -469,22 +552,19 @@ async def evaluate_understanding(payload: EvaluatePayload):
 }}
 """
     try:
-        from ai_engine import call_llm
-        result = call_llm(prompt=prompt, temperature=0.5)
+        # LLM 호출 (비동기)
+        result = await context.ai_tutor.call_llm(prompt=prompt, temperature=0.5)
         return result
     except Exception as e:
         print(f"[EVAL ERR] {e}")
         return {"score": 0, "feedback": "평가 시스템 오류"}
-
-class RescheduleAutoPayload(BaseModel):
-    session_id: str
 
 @app.post("/knowledge/schedule/reschedule_auto")
 async def reschedule_schedule_auto(payload: RescheduleAutoPayload):
     """진도가 밀렸을 때, 완료된 일정을 보존하고 미완료 일정만 오늘부터 마감일까지 알고리즘 기반 재조정"""
     # 1. 최신 활성 스케줄 찾기
     search_tag = f"sess_{payload.session_id}"
-    results = search_knowledge_by_tags([search_tag], limit=10)
+    results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=10)
     active_schedule = None
     for r in results:
         if r["payload"].get("status") != "superseded":
@@ -494,197 +574,37 @@ async def reschedule_schedule_auto(payload: RescheduleAutoPayload):
     if not active_schedule:
         raise HTTPException(status_code=404, detail="Active schedule not found")
         
-    sched_payload = active_schedule["payload"]
-    
-    # 2. 완료된 태스크와 미완료 태스크 분리
-    completed_tasks = []
-    uncompleted_tasks = []
-    
-    for week in sched_payload.get("curriculum", []):
-        for task in week.get("daily_tasks", []):
-            if task.get("completed"):
-                completed_tasks.append(task)
-            else:
-                uncompleted_tasks.append(task)
-                
-    if not uncompleted_tasks:
-        return {"status": "success", "message": "재조정할 미완료 일정이 없습니다."}
-        
-    # 3. 미완료 태스크들로부터 과목별 남은 분량(큐) 재구성
-    subject_queues = {}
-    for task in uncompleted_tasks:
-        subj = task["subject"]
-        unit = task["unit_name"]
-        mins = task["estimated_minutes"]
-        
-        if subj not in subject_queues:
-            subject_queues[subj] = []
-            
-        existing_unit = next((u for u in subject_queues[subj] if u["unit_name"] == unit), None)
-        if existing_unit:
-            existing_unit["remaining_mins"] += mins
-        else:
-            subject_queues[subj].append({
-                "unit_name": unit,
-                "remaining_mins": mins,
-                "required_mins": mins
-            })
-            
-    # 4. 오늘부터 목표일까지의 남은 공부 가능 요일 계산
-    session = get_chat_session(payload.session_id)
+    session = context.chat_repo.get_chat_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
         
     form_data = session.get("collected_data", {})
     
-    from datetime import datetime, timedelta
-    start_date = datetime.now()
+    # 2. Scheduler 클래스를 이용하여 재조정된 일정 생성
+    active_schedule_payload = {**active_schedule["payload"], "doc_id": active_schedule["doc_id"]}
+    new_payload = context.scheduler.reschedule_auto(form_data, active_schedule_payload)
     
-    target_date_str = sched_payload.get("target_date_iso") or form_data.get("마감일")
-    try:
-        target_date = datetime.strptime(target_date_str, "%Y-%m-%d")
-        if target_date < start_date:
-            target_date = start_date + timedelta(days=30)
-    except:
-        target_date = start_date + timedelta(days=30)
-        
-    day_map = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
-    avail_days_str = form_data.get("공부가능요일", [])
-    avail_days = [day_map[d] for d in avail_days_str if d in day_map]
-    if not avail_days:
-        avail_days = [0, 1, 2, 3, 4]
-        
-    raw_hours = form_data.get("일일학습시간", "2")
-    day_mins_map = {}
-    if isinstance(raw_hours, dict):
-        for day_str, hours in raw_hours.items():
-            if day_str in day_map:
-                try:
-                    day_mins_map[day_map[day_str]] = int(float(hours) * 60)
-                except:
-                    day_mins_map[day_map[day_str]] = 120
-    else:
-        try:
-            default_hours = float(str(raw_hours).replace("시간", "").strip())
-        except:
-            default_hours = 2.0
-        default_mins = int(default_hours * 60)
-        for d in avail_days:
-            day_mins_map[d] = default_mins
-            
-    calendar = []
-    curr_date = start_date
-    while curr_date <= target_date:
-        wd = curr_date.weekday()
-        if wd in avail_days:
-            capacity = day_mins_map.get(wd, 120)
-            calendar.append({"date": curr_date.strftime("%Y-%m-%d"), "day_str": list(day_map.keys())[wd], "capacity": capacity})
-        curr_date += timedelta(days=1)
-        
-    if not calendar:
-        calendar = [{"date": (start_date + timedelta(days=i)).strftime("%Y-%m-%d"), "day_str": "월", "capacity": 120} for i in range(1, 8)]
-
-    # 5. 새로운 달력에 남은 큐 분배
-    schedule_result = []
-    max_completed_week = max([t.get("week_number", 0) for t in completed_tasks]) if completed_tasks else 0
-    week_num = max_completed_week + 1
-    
-    subjects_weights = {s["subject_name"]: s.get("weight_percent", 0)/100.0 for s in sched_payload.get("spreadsheet_data", {}).get("subjects", [])}
-    if not subjects_weights:
-        subjects_weights = {subj: 1.0/len(subject_queues) for subj in subject_queues}
-        
-    for idx, day_info in enumerate(calendar):
-        if idx > 0 and idx % len(avail_days) == 0:
-            week_num += 1
-            
-        daily_tasks = []
-        
-        for subj_name, q in list(subject_queues.items()):
-            subj_w = subjects_weights.get(subj_name, 0.1)
-            alloc_mins = int(day_info["capacity"] * subj_w)
-            
-            while alloc_mins > 0 and q:
-                curr_unit = q[0]
-                if curr_unit["remaining_mins"] <= alloc_mins:
-                    spent = curr_unit["remaining_mins"]
-                    alloc_mins -= spent
-                    daily_tasks.append({
-                        "day": f"Week {week_num} - {day_info['day_str']}",
-                        "date": day_info["date"],
-                        "subject": subj_name,
-                        "unit_name": curr_unit["unit_name"],
-                        "task_title": curr_unit["unit_name"],
-                        "estimated_minutes": spent,
-                        "completed": False
-                    })
-                    q.pop(0)
-                else:
-                    curr_unit["remaining_mins"] -= alloc_mins
-                    daily_tasks.append({
-                        "day": f"Week {week_num} - {day_info['day_str']}",
-                        "date": day_info["date"],
-                        "subject": subj_name,
-                        "unit_name": curr_unit["unit_name"],
-                        "task_title": curr_unit["unit_name"],
-                        "estimated_minutes": alloc_mins,
-                        "completed": False
-                    })
-                    alloc_mins = 0
-                    
-        if daily_tasks:
-            week_entry = next((w for w in schedule_result if w["week_number"] == week_num), None)
-            if not week_entry:
-                week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
-                schedule_result.append(week_entry)
-            
-            tasks_list = week_entry.get("daily_tasks")
-            if isinstance(tasks_list, list):
-                tasks_list.extend(daily_tasks)
-
-    # 6. 완료된 태스크들과 새로 생성된 태스크들 병합
-    final_curriculum = []
-    for week_n in sorted(list(set([t["week_number"] for t in completed_tasks]))):
-        week_tasks = [t for t in completed_tasks if t["week_number"] == week_n]
-        final_curriculum.append({
-            "week_number": week_n,
-            "week_theme": f"{week_n}주차 학습 (완료)",
-            "daily_tasks": week_tasks
-        })
-        
-    final_curriculum.extend(schedule_result)
-    
-    # 7. 새로운 스케줄 문서 저장 및 기존 스케줄 superseded 처리
-    new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
-    
+    # 3. 기존 활성 스케줄을 superseded 처리
     active_schedule["payload"]["status"] = "superseded"
-    insert_knowledge(
+    context.knowledge_repo.insert_knowledge(
         doc_id=active_schedule["doc_id"],
         domain_type=active_schedule["domain_type"],
         tags=active_schedule["tags"],
         payload=active_schedule["payload"]
     )
     
-    new_payload = {
-        "plan_title": sched_payload.get("plan_title", "재조정된 진도 계획"),
-        "overall_strategy": sched_payload.get("overall_strategy", ""),
-        "target_date_iso": target_date_str,
-        "observer_code": sched_payload.get("observer_code"),
-        "session_id": payload.session_id,
-        "ref_goal_id": sched_payload.get("ref_goal_id"),
-        "ref_previous_schedule_id": active_schedule["doc_id"],
-        "curriculum": final_curriculum,
-        "spreadsheet_data": sched_payload.get("spreadsheet_data", {})
-    }
-    
-    insert_knowledge(
+    # 4. 신규 스케줄 저장
+    new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
+    context.knowledge_repo.insert_knowledge(
         doc_id=new_schedule_id,
         domain_type="StudySchedule",
         tags=active_schedule["tags"],
         payload=new_payload
     )
     
+    # 5. 세션 상태 업데이트
     session["draft_schedule"] = new_payload
-    save_chat_session(
+    context.chat_repo.save_chat_session(
         session_id=session["session_id"],
         user_id=session["user_id"],
         current_stage=session["current_stage"],
@@ -699,11 +619,11 @@ async def reschedule_schedule_auto(payload: RescheduleAutoPayload):
 @app.post("/knowledge/chat/reschedule")
 async def start_reschedule(payload: ReschedulePayload):
     """진도가 밀렸을 때, 기존 일정을 바탕으로 Mode 3 (리스케줄링) 대화 시작"""
-    doc = get_knowledge(payload.schedule_id)
+    doc = context.knowledge_repo.get_knowledge(payload.schedule_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Schedule not found")
         
-    session = get_chat_session(payload.session_id)
+    session = context.chat_repo.get_chat_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
         
@@ -712,20 +632,19 @@ async def start_reschedule(payload: ReschedulePayload):
     session["draft_schedule"] = doc["payload"]
     session["is_finalized"] = False
     
-    # 대화 기록에 알림용 시스템 메시지 하나 추가 (옵션)
     session["chat_history"].append({
         "role": "assistant",
         "content": "진도가 밀려서 속상하시죠? 괜찮습니다! 현재까지의 달성률을 바탕으로 남은 일정을 어떻게 조정하면 좋을지 말씀해 주세요."
     })
     
-    save_chat_session(session["session_id"], session["user_id"], 3, session["chat_history"], session["collected_data"], doc["payload"], False)
+    context.chat_repo.save_chat_session(session["session_id"], session["user_id"], 3, session["chat_history"], session["collected_data"], doc["payload"], False)
     
     return {"status": "success", "message": "리스케줄링 모드로 전환되었습니다."}
 
 @app.get("/knowledge/chat/{session_id}")
 async def get_chat(session_id: str):
     """특정 세션의 대화 내역 불러오기"""
-    session = get_chat_session(session_id)
+    session = context.chat_repo.get_chat_session(session_id)
     if not session:
         return {"status": "success", "data": None}
     return {"status": "success", "data": session}
@@ -734,7 +653,7 @@ async def get_chat(session_id: str):
 async def get_observed_schedule(observer_code: str):
     """학부모 참관용: 발급된 코드로 읽기 전용 스케줄 불러오기"""
     search_tag = f"obs_{observer_code}"
-    results = search_knowledge_by_tags([search_tag], limit=1)
+    results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=1)
     
     if not results:
         raise HTTPException(status_code=404, detail="유효하지 않은 참관 코드입니다.")
@@ -747,9 +666,9 @@ async def get_observed_schedule(observer_code: str):
 async def get_student_schedule(session_id: str):
     """학생 대시보드용: 세션 ID로 최신 스케줄 불러오기"""
     search_tag = f"sess_{session_id}"
-    results = search_knowledge_by_tags([search_tag], limit=10)
+    results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=10)
     
-    # 여러 버전이 있을 수 있으므로 최신(제일 먼저 오는) supersed 안된 버전 찾기
+    # 여러 버전이 있을 수 있으므로 최신(제일 먼저 오는) superseded 안된 버전 찾기
     active_schedule = None
     for r in results:
         if r["payload"].get("status") != "superseded":
@@ -761,17 +680,10 @@ async def get_student_schedule(session_id: str):
         
     return {"status": "success", "data": active_schedule}
 
-class TaskTogglePayload(BaseModel):
-    week_number: int
-    task_index: int
-    completed: bool
-
-from db import get_knowledge
-
 @app.patch("/knowledge/schedule/{schedule_id}/task")
 async def toggle_task_completion(schedule_id: str, payload: TaskTogglePayload):
     """특정 일정의 일일 태스크 완료 상태를 토글"""
-    doc = get_knowledge(schedule_id)
+    doc = context.knowledge_repo.get_knowledge(schedule_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Schedule not found")
         
@@ -786,7 +698,7 @@ async def toggle_task_completion(schedule_id: str, payload: TaskTogglePayload):
             break
                 
     # 변경된 페이로드 다시 저장 (tags 등은 기존 것 유지)
-    insert_knowledge(
+    context.knowledge_repo.insert_knowledge(
         doc_id=schedule_id, 
         domain_type=doc["domain_type"], 
         tags=doc["tags"], 
@@ -795,27 +707,13 @@ async def toggle_task_completion(schedule_id: str, payload: TaskTogglePayload):
     
     return {"status": "success", "message": "진도 상태가 업데이트되었습니다."}
 
-class SaveAttendancePayload(BaseModel):
-    session_id: str
-    date: str
-    check_in_time: Optional[str] = None
-    check_out_time: Optional[str] = None
-    is_managed: bool = False
-    consult_checked: bool = False
-    consult_note: str = ''
-    scheduled_in_time: Optional[str] = None
-    scheduled_out_time: Optional[str] = None
-
 @app.get("/knowledge/attendance/{session_id}")
 async def api_get_attendance(session_id: str):
-    from db import get_attendance_history
-    history = get_attendance_history(session_id)
+    history = context.attendance_repo.get_attendance_history(session_id)
     return {"status": "success", "data": history}
 
 @app.post("/knowledge/attendance")
 async def api_save_attendance(payload: SaveAttendancePayload):
-    from db import get_db_conn, save_attendance
-    
     # 관리자가 수동으로 기입/수정 시 상태머신용 태깅 횟수 및 상담 개시 시간을 지능적으로 자동 보정(Self-Healing)합니다.
     inferred_tag_count = 0
     inferred_consult_start = None
@@ -830,7 +728,7 @@ async def api_save_attendance(payload: SaveAttendancePayload):
                 inferred_tag_count = 2
 
     # 기존 DB 내 기록 확인하여 이미 등록된 상담 시작 시각이 있다면 그대로 유지
-    conn = get_db_conn()
+    conn = context.db_manager.get_db_conn()
     if conn:
         try:
             cur = conn.cursor()
@@ -843,7 +741,7 @@ async def api_save_attendance(payload: SaveAttendancePayload):
         finally:
             conn.close()
 
-    res = save_attendance(
+    res = context.attendance_repo.save_attendance(
         session_id=payload.session_id,
         date=payload.date,
         check_in_time=payload.check_in_time,
@@ -863,56 +761,36 @@ async def api_save_attendance(payload: SaveAttendancePayload):
 
 @app.get("/knowledge/admin/students")
 async def api_admin_get_students():
-    from db import get_all_user_profiles
-    profiles = get_all_user_profiles()
+    profiles = context.user_repo.get_all_user_profiles()
     return {"status": "success", "data": profiles}
-
-class SaveMessagePayload(BaseModel):
-    session_id: str
-    sender_role: str
-    content: str
 
 @app.get("/knowledge/messages/{session_id}")
 async def api_get_messages(session_id: str):
-    from db import get_study_messages
-    msgs = get_study_messages(session_id)
+    msgs = context.message_repo.get_study_messages(session_id)
     return {"status": "success", "data": msgs}
 
 @app.post("/knowledge/messages")
 async def api_save_message(payload: SaveMessagePayload):
-    from db import save_study_message
-    res = save_study_message(payload.session_id, payload.sender_role, payload.content)
+    res = context.message_repo.save_study_message(payload.session_id, payload.sender_role, payload.content)
     if res:
         return {"status": "success", "message": "메시지가 저장되었습니다."}
     else:
         raise HTTPException(status_code=500, detail="메시지 저장 실패")
 
-# 상담실 NFC 태그 이벤트 상태 (인메모리 전역 관리)
-latest_consult_tag = {"session_id": "", "timestamp": 0}
-
-class ConsultTagPayload(BaseModel):
-    session_id: str
-    date: str
-
 @app.post("/knowledge/attendance/consult_tag")
 async def api_consult_tag(payload: ConsultTagPayload):
-    global latest_consult_tag
-    from db import save_attendance
     import time
     
     # 1. 오늘 해당 이용자의 상담 상태를 '완료(consult_checked = 1)'로 출석 저장
-    res = save_attendance(
+    res = context.attendance_repo.save_attendance(
         session_id=payload.session_id,
         date=payload.date,
         is_managed=True,
         consult_checked=True
     )
     
-    # 2. 전역 이벤트 발행
-    latest_consult_tag = {
-        "session_id": payload.session_id,
-        "timestamp": int(time.time())
-    }
+    # 2. 전역 이벤트 발행 (DB 기반 - 프로세스 세이프)
+    context.save_latest_consult_tag(payload.session_id, int(time.time()))
     
     if res:
         return {"status": "success", "message": "상담용 NFC 태깅 기록이 처리되었습니다."}
@@ -921,41 +799,16 @@ async def api_consult_tag(payload: ConsultTagPayload):
 
 @app.get("/knowledge/admin/latest_consult_tag")
 async def api_get_latest_consult_tag():
-    global latest_consult_tag
-    return {"status": "success", "data": latest_consult_tag}
-
-class NfcTagPayload(BaseModel):
-    session_id: str
-    date: str
-
-def is_late_by_10_mins(now_time_str: str, scheduled_in_str: str | None) -> bool:
-    if not scheduled_in_str or not now_time_str:
-        return False
-    try:
-        now_h, now_m = map(int, now_time_str.split(':'))
-        sch_h, sch_m = map(int, scheduled_in_str.split(':'))
-        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m + 10)
-    except:
-        return False
-
-def is_past_exit_time(now_time_str: str, scheduled_out_str: str | None) -> bool:
-    if not scheduled_out_str or not now_time_str:
-        return False
-    try:
-        now_h, now_m = map(int, now_time_str.split(':'))
-        sch_h, sch_m = map(int, scheduled_out_str.split(':'))
-        return (now_h * 60 + now_m) > (sch_h * 60 + sch_m)
-    except:
-        return False
+    # DB 기반 조회 (프로세스 세이프)
+    latest_tag = context.get_latest_consult_tag()
+    return {"status": "success", "data": latest_tag}
 
 @app.post("/knowledge/attendance/nfc_tag")
 async def api_nfc_tag(payload: NfcTagPayload):
-    global latest_consult_tag
-    from db import get_db_conn, save_attendance
     from datetime import datetime
     import time
     
-    conn = get_db_conn()
+    conn = context.db_manager.get_db_conn()
     if not conn:
         raise HTTPException(status_code=500, detail="DB 연결 실패")
     
@@ -964,7 +817,7 @@ async def api_nfc_tag(payload: NfcTagPayload):
     try:
         # 1. 학생 프로필 및 관리방식, 등하원예약시간 조회
         cur = conn.cursor()
-        cur.execute("SELECT form_data FROM study_knowledge_bundles WHERE doc_id = ?", (f"profile_{payload.session_id}",))
+        cur.execute("SELECT form_data FROM study_knowledge_bundles WHERE id = ?", (f"profile_{payload.session_id}",))
         row = cur.fetchone()
         is_managed = False
         scheduled_in = None
@@ -990,7 +843,7 @@ async def api_nfc_tag(payload: NfcTagPayload):
             # 10분 이상 지각이면 결석 처리 (상담, 퇴실 없음)
             is_absent = is_late_by_10_mins(now_time_str, scheduled_in)
             
-            save_attendance(
+            context.attendance_repo.save_attendance(
                 session_id=payload.session_id,
                 date=payload.date,
                 check_in_time=now_time_str,
@@ -1022,7 +875,7 @@ async def api_nfc_tag(payload: NfcTagPayload):
             # 퇴장 시간이 지났는지 체크
             if is_past_exit_time(now_time_str, scheduled_out):
                 # 2번만 스캔하고 하원하는 경우 (상담 없음)
-                save_attendance(
+                context.attendance_repo.save_attendance(
                     session_id=payload.session_id,
                     date=payload.date,
                     check_out_time=now_time_str,
@@ -1035,7 +888,7 @@ async def api_nfc_tag(payload: NfcTagPayload):
                 return {"status": "success", "tag_type": "check_out_no_consult", "time": now_time_str, "message": f"[{payload.session_id}] 퇴장 시간 초과로 상담 없이 퇴장 처리 완료 ({now_time_str})"}
             else:
                 # 퇴장 시간 전이므로 2번째 스캔은 '상담 시작 시간'으로 기록
-                save_attendance(
+                context.attendance_repo.save_attendance(
                     session_id=payload.session_id,
                     date=payload.date,
                     is_managed=is_managed,
@@ -1044,16 +897,14 @@ async def api_nfc_tag(payload: NfcTagPayload):
                     tag_count=2,
                     tag2_time=now_time_str
                 )
-                # 관리자 대시보드 자동 포커싱을 위해 consult tag 시간 갱신
-                latest_consult_tag = {
-                    "session_id": payload.session_id,
-                    "timestamp": int(time.time())
-                }
+                # 관리자 대시보드 자동 포커싱을 위해 consult tag 시간 갱신 (DB 기반 - 프로세스 세이프)
+                context.save_latest_consult_tag(payload.session_id, int(time.time()))
+                
                 return {"status": "success", "tag_type": "consult_start", "time": now_time_str, "message": f"[{payload.session_id}] 퇴실 상담 시작 등록 및 대시보드 연동 완료 ({now_time_str})"}
         
         # 3단계: 세 번째 스캔 (tag_count == 2인 경우)
         if tag_cnt == 2:
-            save_attendance(
+            context.attendance_repo.save_attendance(
                 session_id=payload.session_id,
                 date=payload.date,
                 check_out_time=now_time_str,
@@ -1069,8 +920,6 @@ async def api_nfc_tag(payload: NfcTagPayload):
         raise HTTPException(status_code=500, detail=f"NFC 통합 태깅 중 오류: {e}")
     finally:
         conn.close()
-
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

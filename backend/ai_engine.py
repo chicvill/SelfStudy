@@ -1,44 +1,165 @@
 import os
 import json
+import re
+import httpx
 from dotenv import load_dotenv, find_dotenv
 from google import genai
 from google.genai import types
-from db import search_knowledge_by_tags
 
 load_dotenv(find_dotenv(), override=True)
 
-gemini_key = os.getenv("GEMINI_API_KEY")
-gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-gemini_client = None
+class AITutor:
+    def __init__(self, knowledge_repo=None):
+        self.knowledge_repo = knowledge_repo
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.gemini_client = None
 
-if gemini_key and not gemini_key.startswith("MY_"):
-    try:
-        gemini_client = genai.Client(api_key=gemini_key)
-        print(f"[OK] Gemini AI Engine configured (Model: {gemini_model}) for SelfStudy RAG.")
-    except Exception as e:
-        print(f"[WARN] Failed to configure Gemini: {e}")
+        if self.gemini_key and not self.gemini_key.startswith("MY_"):
+            try:
+                self.gemini_client = genai.Client(api_key=self.gemini_key)
+                print(f"[OK] Gemini AI Engine configured (Model: {self.gemini_model}) for SelfStudy RAG.")
+            except Exception as e:
+                print(f"[WARN] Failed to configure Gemini: {e}")
 
-def generate_rag_curriculum(user_goal: dict, tags: list) -> dict:
-    """
-    RAG 아키텍처: 주어진 태그로 과거 지식(유사한 목표, 일정, 실패/성공 사례)을 검색하고,
-    이를 프롬프트의 맥락(Context)으로 제공하여 완전히 새로운 맞춤형 일정을 생성.
-    """
-    if not gemini_client:
-        return {"error": "AI 엔진 미설정. (GEMINI_API_KEY 확인)"}
+    def _build_context(self, tags: list) -> str:
+        if self.knowledge_repo:
+            past_knowledges = self.knowledge_repo.search_knowledge_by_tags(tags, limit=3)
+        else:
+            past_knowledges = []
+            
+        if past_knowledges:
+            context_text = "다음은 이전에 비슷한 목표를 가졌던 수험생들의 실제 경험 데이터입니다. 참고하여 새로운 수험생을 도와주세요:\n"
+            for kb in past_knowledges:
+                context_text += f"[{kb['domain_type']}] 태그: {kb['tags']} \n내용: {json.dumps(kb['payload'], ensure_ascii=False)}\n\n"
+            return context_text
+        return "이전에 비슷한 목표를 가진 수험생 데이터가 없습니다. 일반적인 최상의 전략을 바탕으로 생성해주세요.\n"
 
-    # 1. 지식정보창고 검색 (Retrieval)
-    past_knowledges = search_knowledge_by_tags(tags, limit=3)
-    
-    context_text = ""
-    if past_knowledges:
-        context_text = "다음은 이전에 비슷한 목표를 가졌던 수험생들의 실제 경험 데이터(성공/실패 등)입니다. 이 지식을 참고하여 새로운 수험생의 일정을 만들어주세요:\n"
-        for kb in past_knowledges:
-            context_text += f"[{kb['domain_type']}] 태그: {kb['tags']} \n내용: {json.dumps(kb['payload'], ensure_ascii=False)}\n\n"
-    else:
-        context_text = "이전에 비슷한 목표를 가진 수험생 데이터가 없습니다. 일반적인 최상의 전략을 바탕으로 생성해주세요.\n"
+    async def call_llm(
+        self, 
+        prompt: str | None = None, 
+        messages: list | None = None, 
+        system_instruction: str | None = None, 
+        response_mime_type: str = "application/json", 
+        temperature: float = 0.7
+    ) -> dict:
+        """
+        Unified LLM caller. Tries Gemini async first, falls back to OpenAI async if Gemini fails.
+        """
+        openai_key = os.getenv("OPENAI_API_KEY")
+        has_openai = openai_key and not openai_key.startswith("MY_")
+        
+        # 1. Try Gemini first
+        if self.gemini_client:
+            try:
+                if messages:
+                    # Chat style call - using .aio (async) Client
+                    response = await self.gemini_client.aio.models.generate_content(
+                        model=self.gemini_model,
+                        contents=messages,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            response_mime_type=response_mime_type,
+                            temperature=temperature
+                        )
+                    )
+                else:
+                    # Prompt style call - using .aio (async) Client
+                    response = await self.gemini_client.aio.models.generate_content(
+                        model=self.gemini_model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type=response_mime_type, 
+                            temperature=temperature
+                        )
+                    )
+                
+                raw_text = response.text
+                text = raw_text.strip() if raw_text else ""
+                
+                # Robust JSON extraction
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(1)
+                else:
+                    text = text.strip()
+                    
+                return json.loads(text)
+            except Exception as e:
+                print(f"[GEMINI ERROR] Exception: {e}")
+                if not has_openai:
+                    return {"error": f"Gemini 오류 및 OpenAI 미설정: {str(e)}"}
+                print("[WARN] Gemini failed. Falling back to OpenAI (async)...")
+        
+        # 2. Fallback to OpenAI (Async using httpx)
+        if not has_openai:
+            return {"error": "AI 엔진 미설정 (Gemini 실패 및 OpenAI 키 없음)"}
+            
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {openai_key}"
+        }
+        
+        openai_messages = []
+        if system_instruction:
+            openai_messages.append({"role": "system", "content": system_instruction})
+            
+        if messages:
+            # Translate Gemini message format to OpenAI
+            for msg in messages:
+                role = "assistant" if msg["role"] == "model" else msg["role"]
+                text_val = ""
+                if isinstance(msg.get("parts"), list) and len(msg["parts"]) > 0:
+                    part = msg["parts"][0]
+                    if isinstance(part, dict):
+                        text_val = part.get("text", "")
+                    else:
+                        text_val = getattr(part, "text", str(part))
+                else:
+                    text_val = str(msg.get("parts", ""))
+                openai_messages.append({"role": role, "content": text_val})
+        else:
+            openai_messages.append({"role": "user", "content": prompt})
+            
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": openai_messages,
+            "temperature": temperature
+        }
+        if response_mime_type == "application/json":
+            payload["response_format"] = {"type": "json_object"}
+            if openai_messages:
+                openai_messages[-1]["content"] += "\n\nCRITICAL: You must return the response in json format."
+            
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30.0)
+                if response.status_code != 200:
+                    print(f"[OPENAI ERROR] RAW RESPONSE: {response.text}")
+                response.raise_for_status()
+                res_json = response.json()
+                text = res_json["choices"][0]["message"]["content"]
+                return json.loads(text.strip())
+        except Exception as e:
+            print(f"[OPENAI ERROR] {e}")
+            return {"error": f"AI 호출 오류 (OpenAI): {str(e)}"}
 
-    # 2. 프롬프트 생성 (Augmentation)
-    prompt = f"""
+    async def _call_gemini(self, prompt: str) -> dict:
+        return await self.call_llm(prompt=prompt)
+
+    async def generate_rag_curriculum(self, user_goal: dict, tags: list) -> dict:
+        """
+        RAG 아키텍처: 주어진 태그로 과거 지식(유사한 목표, 일정, 실패/성공 사례)을 검색하고,
+        이를 프롬프트의 맥락(Context)으로 제공하여 완전히 새로운 맞춤형 일정을 생성.
+        """
+        if not self.gemini_client:
+            return {"error": "AI 엔진 미설정. (GEMINI_API_KEY 확인)"}
+
+        # 1. 지식정보창고 검색 (Retrieval)
+        context_text = self._build_context(tags)
+
+        # 2. 프롬프트 생성 (Augmentation)
+        prompt = f"""
 당신은 모든 자격증과 개인 목표 달성을 도와주는 만능 AI 튜터입니다.
 아래의 [과거 지식 데이터]를 분석하여 성공 요인은 취하고 실패 요인은 회피하는 전략을 세우세요.
 그리고 [새로운 수험생 정보]를 바탕으로 정밀한 알고리즘 스케줄링을 위한 '과목 및 단원별 배분율' JSON을 작성해주세요.
@@ -82,129 +203,12 @@ def generate_rag_curriculum(user_goal: dict, tags: list) -> dict:
 - target_date_iso는 사용자가 입력한 마감일(예: 2026.11.10, 다음달 말)을 무조건 정확한 날짜 포맷(YYYY-MM-DD)으로 파싱해야 합니다.
 - 출력은 백틱(```json) 없이 원시 JSON 문자열로만 반환하십시오.
 """
-    # 3. AI 답변 생성 (Generation)
-    return _call_gemini(prompt)
+        # 3. AI 답변 생성 (Generation)
+        return await self._call_gemini(prompt)
 
-def _build_context(tags: list):
-    past_knowledges = search_knowledge_by_tags(tags, limit=3)
-    if past_knowledges:
-        context_text = "다음은 이전에 비슷한 목표를 가졌던 수험생들의 실제 경험 데이터입니다. 참고하여 새로운 수험생을 도와주세요:\n"
-        for kb in past_knowledges:
-            context_text += f"[{kb['domain_type']}] 태그: {kb['tags']} \n내용: {json.dumps(kb['payload'], ensure_ascii=False)}\n\n"
-        return context_text
-    return "이전에 비슷한 목표를 가진 수험생 데이터가 없습니다. 일반적인 최상의 전략을 바탕으로 생성해주세요.\n"
-
-def call_llm(prompt: str | None = None, messages: list | None = None, system_instruction: str | None = None, response_mime_type: str = "application/json", temperature: float = 0.7) -> dict:
-    """
-    Unified LLM caller. Tries Gemini first, falls back to OpenAI if Gemini fails or is rate limited/unsupported.
-    """
-    openai_key = os.getenv("OPENAI_API_KEY")
-    has_openai = openai_key and not openai_key.startswith("MY_")
-    
-    # 1. Try Gemini first
-    if gemini_client:
-        try:
-            if messages:
-                # Chat style call
-                response = gemini_client.models.generate_content(
-                    model=gemini_model,
-                    contents=messages,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        response_mime_type=response_mime_type,
-                        temperature=temperature
-                    )
-                )
-            else:
-                # Prompt style call
-                response = gemini_client.models.generate_content(
-                    model=gemini_model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type=response_mime_type, 
-                        temperature=temperature
-                    )
-                )
-            
-            raw_text = response.text
-            text = raw_text.strip() if raw_text else ""
-            
-            # Robust JSON extraction
-            import re
-            json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', text, re.DOTALL)
-            if json_match:
-                text = json_match.group(1)
-            else:
-                text = text.strip()
-                
-            return json.loads(text)
-        except Exception as e:
-            print(f"[GEMINI ERROR] Exception: {e}")
-            if not has_openai:
-                return {"error": f"Gemini 오류 및 OpenAI 미설정: {str(e)}"}
-            print("[WARN] Gemini failed. Falling back to OpenAI...")
-    
-    # 2. Fallback to OpenAI
-    if not has_openai:
-        return {"error": "AI 엔진 미설정 (Gemini 실패 및 OpenAI 키 없음)"}
-        
-    import requests
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {openai_key}"
-    }
-    
-    openai_messages = []
-    if system_instruction:
-        openai_messages.append({"role": "system", "content": system_instruction})
-        
-    if messages:
-        # Translate Gemini message format to OpenAI
-        for msg in messages:
-            role = "assistant" if msg["role"] == "model" else msg["role"]
-            text_val = ""
-            if isinstance(msg.get("parts"), list) and len(msg["parts"]) > 0:
-                part = msg["parts"][0]
-                if isinstance(part, dict):
-                    text_val = part.get("text", "")
-                else:
-                    text_val = getattr(part, "text", str(part))
-            else:
-                text_val = str(msg.get("parts", ""))
-            openai_messages.append({"role": role, "content": text_val})
-    else:
-        openai_messages.append({"role": "user", "content": prompt})
-        
-    from typing import Any
-    payload: dict[str, Any] = {
-        "model": "gpt-4o-mini",
-        "messages": openai_messages,
-        "temperature": temperature
-    }
-    if response_mime_type == "application/json":
-        payload["response_format"] = {"type": "json_object"}
-        # OpenAI JSON 모드 검증 통과를 위해 메시지 본문에 'json' 단어를 강제로 추가
-        if openai_messages:
-            openai_messages[-1]["content"] += "\n\nCRITICAL: You must return the response in json format."
-        
-    try:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
-        if response.status_code != 200:
-            print(f"[OPENAI ERROR] RAW RESPONSE: {response.text}")
-        response.raise_for_status()
-        res_json = response.json()
-        text = res_json["choices"][0]["message"]["content"]
-        return json.loads(text.strip())
-    except Exception as e:
-        print(f"[OPENAI ERROR] {e}")
-        return {"error": f"AI 호출 오류 (OpenAI): {str(e)}"}
-
-def _call_gemini(prompt: str):
-    return call_llm(prompt=prompt)
-
-def generate_subjects(user_goal: dict, tags: list) -> dict:
-    context_text = _build_context(tags)
-    prompt = f"""
+    async def generate_subjects(self, user_goal: dict, tags: list) -> dict:
+        context_text = self._build_context(tags)
+        prompt = f"""
 당신은 만능 AI 튜터입니다. [과거 지식 데이터]를 분석하여 [새로운 수험생 정보]를 바탕으로 학습해야 할 '과목 리스트'를 생성해주세요.
 [과거 지식 데이터]
 {context_text}
@@ -226,10 +230,10 @@ def generate_subjects(user_goal: dict, tags: list) -> dict:
   }}
 - 출력은 백틱(```json) 없이 원시 JSON 문자열로만 반환하십시오.
 """
-    return _call_gemini(prompt)
+        return await self._call_gemini(prompt)
 
-def generate_subject_weights(subjects: list, user_goal: dict) -> dict:
-    prompt = f"""
+    async def generate_subject_weights(self, subjects: list, user_goal: dict) -> dict:
+        prompt = f"""
 당신은 만능 AI 튜터입니다.
 다음은 수험생이 확정한 과목 리스트입니다: {json.dumps(subjects, ensure_ascii=False)}
 목표: {json.dumps(user_goal, ensure_ascii=False)}
@@ -246,10 +250,10 @@ def generate_subject_weights(subjects: list, user_goal: dict) -> dict:
   }}
 - 출력은 백틱(```json) 없이 원시 JSON 문자열로만 반환하십시오.
 """
-    return _call_gemini(prompt)
+        return await self._call_gemini(prompt)
 
-def generate_units(subjects: list, user_goal: dict) -> dict:
-    prompt = f"""
+    async def generate_units(self, subjects: list, user_goal: dict) -> dict:
+        prompt = f"""
 당신은 만능 AI 튜터입니다.
 수험생의 목표: {json.dumps(user_goal, ensure_ascii=False)}
 확정된 과목 리스트(비중 포함): {json.dumps(subjects, ensure_ascii=False)}
@@ -272,10 +276,10 @@ def generate_units(subjects: list, user_goal: dict) -> dict:
     ]
   }}
 """
-    return _call_gemini(prompt)
+        return await self._call_gemini(prompt)
 
-def generate_unit_weights(subjects_with_units: list, user_goal: dict) -> dict:
-    prompt = f"""
+    async def generate_unit_weights(self, subjects_with_units: list, user_goal: dict) -> dict:
+        prompt = f"""
 당신은 만능 AI 튜터입니다.
 수험생 목표: {json.dumps(user_goal, ensure_ascii=False)}
 단원이 포함된 과목 리스트: {json.dumps(subjects_with_units, ensure_ascii=False)}
@@ -297,5 +301,4 @@ def generate_unit_weights(subjects_with_units: list, user_goal: dict) -> dict:
     ]
   }}
 """
-    return _call_gemini(prompt)
-
+        return await self._call_gemini(prompt)

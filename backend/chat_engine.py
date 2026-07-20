@@ -1,20 +1,30 @@
 import json
-from google.genai import types
-from ai_engine import gemini_client, gemini_model
 
-def handle_chat_message(session_id: str, current_stage: int, chat_history: list, collected_data: dict, draft_schedule: dict, user_msg: str) -> dict:
-    """
-    초고속 대화형 온보딩 (Fast-track Refinement)
-    - Mode 1 (current_stage == 1): 목표와 기간 수집
-    - Mode 2 (current_stage == 2): 생성된 초안을 대화로 수정 (Refinement)
-    - Mode 3 (current_stage == 3): 동적 일정 재조정 (Dynamic Rescheduling)
-    """
-    if not gemini_client:
-        return {"error": "AI 엔진 미설정"}
+class ChatEngine:
+    def __init__(self, ai_tutor):
+        self.ai_tutor = ai_tutor
 
-    if current_stage == 1:
-        # Mode 1: 정보 수집
-        system_prompt = f"""
+    async def handle_chat_message(
+        self, 
+        session_id: str, 
+        current_stage: int, 
+        chat_history: list, 
+        collected_data: dict, 
+        draft_schedule: dict, 
+        user_msg: str
+    ) -> dict:
+        """
+        초고속 대화형 온보딩 (Fast-track Refinement)
+        - Mode 1 (current_stage == 1): 목표와 기간 수집
+        - Mode 2 (current_stage == 2): 생성된 초안을 대화로 수정 (Refinement)
+        - Mode 3 (current_stage == 3): 동적 일정 재조정 (Dynamic Rescheduling)
+        """
+        if not self.ai_tutor.gemini_client:
+            return {"error": "AI 엔진 미설정"}
+
+        if current_stage == 1:
+            # Mode 1: 정보 수집
+            system_prompt = f"""
 당신은 수험생의 목표와 기간을 빠르고 명확하게 파악하는 AI 튜터입니다.
 현재 단계: Mode 1 (목표/기간 수집)
 
@@ -35,10 +45,10 @@ def handle_chat_message(session_id: str, current_stage: int, chat_history: list,
   "extracted_data": {{ // 추출한 데이터 }}
 }}
 """
-    elif current_stage == 2:
-        # Mode 2: 초안 수정 (Refinement)
-        spreadsheet_data = draft_schedule.get("spreadsheet_data", draft_schedule)
-        system_prompt = f"""
+        elif current_stage == 2:
+            # Mode 2: 초안 수정 (Refinement)
+            spreadsheet_data = draft_schedule.get("spreadsheet_data", draft_schedule)
+            system_prompt = f"""
 당신은 수험생의 학습 비중을 조절하는 알고리즘 스케줄러 보조 AI입니다.
 현재 단계: Mode 2 (과목/단원 비중 수정)
 
@@ -59,9 +69,9 @@ def handle_chat_message(session_id: str, current_stage: int, chat_history: list,
   "new_spreadsheet_data": {{ // 수정된 배분율 JSON 객체 }}
 }}
 """
-    else:
-        # Mode 3: 동적 리스케줄링 (Dynamic Rescheduling)
-        system_prompt = f"""
+        else:
+            # Mode 3: 동적 리스케줄링 (Dynamic Rescheduling)
+            system_prompt = f"""
 당신은 위기 극복을 돕는 리스케줄링(일정 재조정) AI 튜터입니다.
 현재 단계: Mode 3 (일정 재조정)
 
@@ -82,39 +92,39 @@ def handle_chat_message(session_id: str, current_stage: int, chat_history: list,
 }}
 """
 
-    # 대화 기록 포맷팅
-    messages = []
-    for msg in chat_history:
-        role = "user" if msg["role"] == "user" else "model"
-        content = msg["content"]
-        if isinstance(content, dict) and "ai_response" in content:
-            content = content["ai_response"]
-        messages.append({"role": role, "parts": [{"text": str(content)}]})
-    
-    # 현재 사용자 메시지 추가
-    messages.append({"role": "user", "parts": [{"text": user_msg}]})
+        # 대화 기록 포맷팅
+        messages = []
+        for msg in chat_history:
+            role = "user" if msg["role"] == "user" else "model"
+            content = msg["content"]
+            if isinstance(content, dict) and "ai_response" in content:
+                content = content["ai_response"]
+            messages.append({"role": role, "parts": [{"text": str(content)}]})
+        
+        # 현재 사용자 메시지 추가
+        messages.append({"role": "user", "parts": [{"text": user_msg}]})
 
-    try:
-        from ai_engine import call_llm
-        result = call_llm(messages=messages, system_instruction=system_prompt, temperature=0.7)
-        
-        if "error" in result:
-            return result
-        
-        # 상태 업데이트
-        new_stage = current_stage + 1 if result.get("stage_complete") else current_stage
-        
-        # 수집 데이터 병합
-        new_collected_data = {**collected_data}
-        if result.get("extracted_data"):
-            new_collected_data.update(result["extracted_data"])
+        try:
+            # Await the async call_llm
+            result = await self.ai_tutor.call_llm(messages=messages, system_instruction=system_prompt, temperature=0.7)
             
-        return {
-            "ai_response": result.get("ai_response", "네, 알겠습니다."),
-            "new_stage": new_stage,
-            "new_collected_data": new_collected_data,
-            "new_draft_schedule": result.get("new_draft_schedule", draft_schedule)
-        }
-    except Exception as e:
-        print(f"[CHAT AI ERROR] {e}")
-        return {"error": str(e)}
+            if "error" in result:
+                return result
+            
+            # 상태 업데이트
+            new_stage = current_stage + 1 if result.get("stage_complete") else current_stage
+            
+            # 수집 데이터 병합
+            new_collected_data = {**collected_data}
+            if result.get("extracted_data"):
+                new_collected_data.update(result["extracted_data"])
+                
+            return {
+                "ai_response": result.get("ai_response", "네, 알겠습니다."),
+                "new_stage": new_stage,
+                "new_collected_data": new_collected_data,
+                "new_draft_schedule": result.get("new_draft_schedule", draft_schedule)
+            }
+        except Exception as e:
+            print(f"[CHAT AI ERROR] {e}")
+            return {"error": str(e)}
