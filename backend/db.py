@@ -130,8 +130,8 @@ class DatabaseManager:
                 except sqlite3.OperationalError:
                     pass
             
-            # 관리자 계정 기본 세팅 (admin / 1212)
-            cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('admin', '1212')")
+            # 관리자 계정 기본 세팅 (010-1111-2222 / 1212)
+            cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('010-1111-2222', '1212')")
             
             conn.commit()
             print("[OK] SQLite study_knowledge_bundles schema initialized successfully.")

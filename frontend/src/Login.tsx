@@ -20,12 +20,7 @@ export default function Login({ onLogin }: LoginProps) {
     } else if (val.length > 7) {
       val = val.slice(0, 3) + '-' + val.slice(3, 7) + '-' + val.slice(7, 11);
     }
-    // If user is trying to type 'admin', allow it
-    if (e.target.value.toLowerCase().startsWith('admin')) {
-      setUserId(e.target.value);
-    } else {
-      setUserId(val);
-    }
+    setUserId(val);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,9 +32,9 @@ export default function Login({ onLogin }: LoginProps) {
       return;
     }
 
-    // 아이디 유효성 검사 (admin이거나 010-XXXX-XXXX 형태인지 확인)
+    // 아이디 유효성 검사 (010-XXXX-XXXX 형태인지 확인)
     const phoneRegex = /^010-[0-9]{4}-[0-9]{4}$/;
-    if (id !== 'admin' && !phoneRegex.test(id)) {
+    if (!phoneRegex.test(id)) {
       alert("고객 아이디는 전화번호(010-1234-5678) 형식이어야 합니다.");
       return;
     }

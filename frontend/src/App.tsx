@@ -41,7 +41,7 @@ function App() {
     setSessionId(id); // 사용자의 전화번호를 세션 ID로 사용
     localStorage.setItem("selfstudy_session_id", id);
     
-    if (id === 'admin') {
+    if (id === '010-1111-2222') {
       setIsOnboarded(true);
       setCurrentTab('admin');
       return;
@@ -153,7 +153,7 @@ function App() {
         
         <h3 style={{ margin: '0 0 20px 0', color: '#1976d2' }}>메뉴</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          {loggedInUserId === 'admin' ? (
+          {loggedInUserId === '010-1111-2222' ? (
             <button onClick={() => handleMenuClick('admin', true)} style={sidebarButtonStyle(currentTab === 'admin')}>🏫 관리 대시보드</button>
           ) : (
             <>
