@@ -10,6 +10,7 @@ interface LoginProps {
 export default function Login({ onLogin }: LoginProps) {
   const [userId, setUserId] = useState(() => localStorage.getItem('selfstudy_saved_user_id') || '');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
 
@@ -32,6 +33,11 @@ export default function Login({ onLogin }: LoginProps) {
       return;
     }
 
+    if (!isLoginMode && !name.trim()) {
+      alert("이름을 입력해주세요.");
+      return;
+    }
+
     // 아이디 유효성 검사 (010-XXXX-XXXX 형태인지 확인)
     const phoneRegex = /^010-[0-9]{4}-[0-9]{4}$/;
     if (!phoneRegex.test(id)) {
@@ -46,15 +52,17 @@ export default function Login({ onLogin }: LoginProps) {
         const res = await axios.post(`${API_URL}/knowledge/login`, { user_id: id, password: pw });
         if (res.data.success) {
           localStorage.setItem('selfstudy_saved_user_id', id);
+          localStorage.setItem('selfstudy_saved_user_name', res.data.name || '');
           onLogin(id);
         }
       } else {
-        const res = await axios.post(`${API_URL}/knowledge/signup`, { user_id: id, password: pw });
+        const res = await axios.post(`${API_URL}/knowledge/signup`, { user_id: id, password: pw, name: name.trim() });
         if (res.data.success) {
           alert("회원가입이 완료되었습니다. 로그인해주세요!");
           localStorage.setItem('selfstudy_saved_user_id', id);
           setIsLoginMode(true);
           setPassword('');
+          setName('');
         }
       }
     } catch (err: any) {
@@ -69,6 +77,18 @@ export default function Login({ onLogin }: LoginProps) {
         {isLoginMode ? '수험생 로그인' : '수험생 회원가입'}
       </h2>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {!isLoginMode && (
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>이름</label>
+            <input 
+              type="text" 
+              value={name} 
+              onChange={e => setName(e.target.value)}
+              placeholder="본인의 이름을 입력하세요"
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+            />
+          </div>
+        )}
         <div>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>아이디 (전화번호)</label>
           <input 
@@ -99,7 +119,11 @@ export default function Login({ onLogin }: LoginProps) {
       </form>
       <div style={{ marginTop: '20px', textAlign: 'center' }}>
         <button 
-          onClick={() => setIsLoginMode(!isLoginMode)}
+          onClick={() => {
+            setIsLoginMode(!isLoginMode);
+            setName('');
+            setPassword('');
+          }}
           style={{ background: 'none', border: 'none', color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }}
         >
           {isLoginMode ? '계정이 없으신가요? 회원가입하기' : '이미 계정이 있으신가요? 로그인하기'}

@@ -11,7 +11,8 @@ class ChatEngine:
         chat_history: list, 
         collected_data: dict, 
         draft_schedule: dict, 
-        user_msg: str
+        user_msg: str,
+        user_name: str = ""
     ) -> dict:
         """
         초고속 대화형 온보딩 (Fast-track Refinement)
@@ -22,12 +23,14 @@ class ChatEngine:
         if not self.ai_tutor.gemini_client:
             return {"error": "AI 엔진 미설정"}
 
+        name_instruction = f"\n[중요] 수험생의 이름은 '{user_name}'입니다. 대화 시 반드시 '{user_name} 님'이라고 다정하고 친근하게 부르며 다정하게 격려해 주세요.\n" if user_name else ""
+
         if current_stage == 1:
             # Mode 1: 정보 수집
             system_prompt = f"""
 당신은 수험생의 목표와 기간을 빠르고 명확하게 파악하는 AI 튜터입니다.
 현재 단계: Mode 1 (목표/기간 수집)
-
+{name_instruction}
 [지금까지 수집된 정보 요약]
 {json.dumps(collected_data, ensure_ascii=False)}
 
@@ -51,7 +54,7 @@ class ChatEngine:
             system_prompt = f"""
 당신은 수험생의 학습 비중을 조절하는 알고리즘 스케줄러 보조 AI입니다.
 현재 단계: Mode 2 (과목/단원 비중 수정)
-
+{name_instruction}
 [현재 과목 및 단원 배분율(%) JSON]
 {json.dumps(spreadsheet_data, ensure_ascii=False)}
 
@@ -74,7 +77,7 @@ class ChatEngine:
             system_prompt = f"""
 당신은 위기 극복을 돕는 리스케줄링(일정 재조정) AI 튜터입니다.
 현재 단계: Mode 3 (일정 재조정)
-
+{name_instruction}
 [현재 수험생의 지연된 일정 및 진도율 JSON]
 {json.dumps(draft_schedule, ensure_ascii=False)}
 

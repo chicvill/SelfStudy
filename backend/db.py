@@ -73,6 +73,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY,
                     password TEXT NOT NULL,
+                    name TEXT DEFAULT '',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -130,8 +131,15 @@ class DatabaseManager:
                 except sqlite3.OperationalError:
                     pass
             
+            # users 테이블 name 컬럼 추가 마이그레이션
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
+            
             # 관리자 계정 기본 세팅 (010-1111-2222 / 1212)
-            cur.execute("INSERT OR IGNORE INTO users (user_id, password) VALUES ('010-1111-2222', '1212')")
+            cur.execute("INSERT OR IGNORE INTO users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')")
+            cur.execute("UPDATE users SET name = '관리자' WHERE user_id = '010-1111-2222' AND (name IS NULL OR name = '')")
             
             conn.commit()
             print("[OK] SQLite study_knowledge_bundles schema initialized successfully.")
@@ -146,11 +154,11 @@ class UserRepository:
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
 
-    def register_user(self, user_id: str, password: str) -> bool:
+    def register_user(self, user_id: str, password: str, name: str = '') -> bool:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("INSERT INTO users (user_id, password) VALUES (?, ?)", (user_id, password))
+                cur.execute("INSERT INTO users (user_id, password, name) VALUES (?, ?, ?)", (user_id, password, name))
                 return True
         except Exception as e:
             print(f"Register Error: {e}")
@@ -167,6 +175,33 @@ class UserRepository:
                 return False
         except Exception as e:
             print(f"Verify Error: {e}")
+            return False
+
+    def get_user_info(self, user_id: str) -> dict:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT user_id, password, name FROM users WHERE user_id = ?", (user_id,))
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+                return None
+        except Exception as e:
+            print(f"Get User Info Error: {e}")
+            return None
+
+    def update_user_info(self, user_id: str, name: str, password: str) -> bool:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE users 
+                    SET name = ?, password = ? 
+                    WHERE user_id = ?
+                """, (name, password, user_id))
+                return True
+        except Exception as e:
+            print(f"Update User Info Error: {e}")
             return False
 
     def save_user_profile(self, user_id: str, form_data: dict) -> bool:
@@ -202,7 +237,11 @@ class UserRepository:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT * FROM user_profiles")
+                cur.execute("""
+                    SELECT up.user_id, up.form_data, up.updated_at, u.name 
+                    FROM user_profiles up
+                    LEFT JOIN users u ON up.user_id = u.user_id
+                """)
                 rows = cur.fetchall()
                 results = []
                 for r in rows:

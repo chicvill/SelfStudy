@@ -259,6 +259,7 @@ export default function AdminDashboard() {
   // Filter students based on search query
   const filteredStudents = students.filter(s => 
     s.user_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.name && s.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (s.form_data?.목표 && s.form_data.목표.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -352,7 +353,7 @@ export default function AdminDashboard() {
                 fontWeight: selectedStudent === s.user_id ? 'bold' : 'normal', color: '#333'
               }}
             >
-              <div>📞 {s.user_id}</div>
+              <div>👤 {s.name || '이름 없음'} ({s.user_id})</div>
               <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
                 목표: {s.form_data?.목표 || '설정 전'}
               </div>
@@ -386,8 +387,8 @@ export default function AdminDashboard() {
             {/* 상단 간략 정보 및 이용권 설정 */}
             <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', background: '#f5f5f5', padding: '20px', borderRadius: '12px' }}>
               <div style={{ flex: 1, minWidth: '250px' }}>
-                <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>이용자 번호</div>
-                <strong style={{ fontSize: '18px', color: '#333' }}>{selectedStudent}</strong>
+                <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>선택된 이용자 정보</div>
+                <strong style={{ fontSize: '18px', color: '#333' }}>{students.find(s => s.user_id === selectedStudent)?.name || '이름 없음'} ({selectedStudent})</strong>
                 <span style={{ marginLeft: '10px', fontSize: '12px', background: isManaged ? '#ffe0b2' : '#e0e0e0', color: isManaged ? '#e65100' : '#666', padding: '3px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
                   {isManaged ? '관리형 수험생' : '자율형 수험생'}
                 </span>

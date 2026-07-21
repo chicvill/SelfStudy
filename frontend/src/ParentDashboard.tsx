@@ -108,7 +108,7 @@ export default function ParentDashboard() {
     return diffDays;
   };
 
-  const checkIsTardy = (dateStr: string, actualIn: string | null, scheduledIn: string | null) => {
+  const checkIsTardy = (_dateStr: string, actualIn: string | null, scheduledIn: string | null) => {
     if (!actualIn || !scheduledIn) return false;
     const [actH, actM] = actualIn.split(':').map(Number);
     const [schH, schM] = scheduledIn.split(':').map(Number);

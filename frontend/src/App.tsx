@@ -6,6 +6,7 @@ import StudentDashboard from './StudentDashboard';
 import GoalOnboardingForm from './GoalOnboardingForm';
 import Login from './Login';
 import AdminDashboard from './AdminDashboard';
+import ProfileEdit from './ProfileEdit';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
@@ -14,7 +15,8 @@ const generateSessionId = () => "sess_" + Math.random().toString(36).substr(2, 9
 
 function App() {
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'onboarding' | 'browser' | 'parent' | 'student' | 'admin'>('onboarding');
+  const [userName, setUserName] = useState<string>('');
+  const [currentTab, setCurrentTab] = useState<'onboarding' | 'browser' | 'parent' | 'student' | 'admin' | 'profile_edit'>('onboarding');
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
@@ -40,6 +42,16 @@ function App() {
     setLoggedInUserId(id);
     setSessionId(id); // 사용자의 전화번호를 세션 ID로 사용
     localStorage.setItem("selfstudy_session_id", id);
+
+    // 로그인 시 사용자 이름 조회
+    try {
+      const uRes = await axios.get(`${API_URL}/knowledge/user/${id}`);
+      if (uRes.data.status === 'success' && uRes.data.data) {
+        setUserName(uRes.data.data.name || '');
+      }
+    } catch (err) {
+      console.error("Failed to fetch user name", err);
+    }
     
     if (id === '010-1111-2222') {
       setIsOnboarded(true);
@@ -121,6 +133,11 @@ function App() {
           </button>
           <h1 style={{ margin: 0, color: '#fff', fontSize: '24px', fontWeight: '800' }}>
             MQstudy <span style={{ color: '#82d7ff' }}>자기주도학습 플랫폼</span>
+            {userName && (
+              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '10px', color: '#e0e0e0' }}>
+                ({userName} {loggedInUserId === '010-1111-2222' ? '관리자' : '수험생'}님)
+              </span>
+            )}
           </h1>
         </div>
         <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
@@ -177,6 +194,7 @@ function App() {
             </>
           )}
           
+          <button onClick={() => handleMenuClick('profile_edit', true)} style={sidebarButtonStyle(currentTab === 'profile_edit')}>👤 개인 정보 수정</button>
           <button onClick={() => handleMenuClick('browser', true)} style={sidebarButtonStyle(currentTab === 'browser')}>📖 지식창고 탐색</button>
           <button onClick={() => handleMenuClick('parent', true)} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관</button>
         </div>
@@ -213,6 +231,15 @@ function App() {
         {currentTab === 'browser' && <KnowledgeBrowser />}
         {currentTab === 'parent' && <ParentDashboard />}
         {currentTab === 'admin' && <AdminDashboard />}
+        {currentTab === 'profile_edit' && (
+          <ProfileEdit 
+            userId={loggedInUserId!} 
+            onSaved={(newName) => {
+              setUserName(newName);
+              setCurrentTab(loggedInUserId === '010-1111-2222' ? 'admin' : 'student');
+            }} 
+          />
+        )}
       </main>
     </div>
   );

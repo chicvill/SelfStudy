@@ -79,6 +79,7 @@ class FormOnboardPayload(BaseModel):
 class AuthPayload(BaseModel):
     user_id: str
     password: str
+    name: Optional[str] = ""
 
 class ProfilePayload(BaseModel):
     user_id: str
@@ -244,7 +245,7 @@ async def search_knowledge(tags: str):
 
 @app.post("/knowledge/signup")
 async def signup(payload: AuthPayload):
-    success = context.user_repo.register_user(payload.user_id, payload.password)
+    success = context.user_repo.register_user(payload.user_id, payload.password, payload.name)
     if success:
         return {"status": "success", "success": True, "message": "User registered successfully"}
     else:
@@ -252,11 +253,37 @@ async def signup(payload: AuthPayload):
 
 @app.post("/knowledge/login")
 async def login(payload: AuthPayload):
-    success = context.user_repo.verify_user(payload.user_id, payload.password)
-    if success:
-        return {"status": "success", "success": True, "message": "Login successful"}
+    user_info = context.user_repo.get_user_info(payload.user_id)
+    if user_info and user_info["password"] == payload.password:
+        return {
+            "status": "success",
+            "success": True,
+            "message": "Login successful",
+            "name": user_info["name"]
+        }
     else:
         return {"status": "error", "success": False, "message": "Invalid user ID or password"}
+
+class UpdateUserPayload(BaseModel):
+    user_id: str
+    name: str
+    password: str
+
+@app.get("/knowledge/user/{user_id}")
+async def get_user_info(user_id: str):
+    user_info = context.user_repo.get_user_info(user_id)
+    if user_info:
+        return {"status": "success", "data": user_info}
+    else:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+@app.post("/knowledge/user/update")
+async def update_user(payload: UpdateUserPayload):
+    success = context.user_repo.update_user_info(payload.user_id, payload.name, payload.password)
+    if success:
+        return {"status": "success", "message": "개인 정보가 수정되었습니다."}
+    else:
+        return {"status": "error", "message": "정보 수정에 실패했습니다."}
 
 @app.get("/knowledge/profile/{user_id}")
 async def get_profile(user_id: str):
@@ -409,6 +436,9 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     if session.get("is_finalized"):
         return {"status": "success", "ai_response": "이미 확정된 일정입니다.", "current_stage": current_stage}
 
+    user_info = context.user_repo.get_user_info(payload.session_id)
+    user_name = user_info["name"] if (user_info and "name" in user_info) else ""
+
     # AI 상태 머신 호출 (비동기)
     ai_result = await context.chat_engine.handle_chat_message(
         session_id=payload.session_id,
@@ -416,7 +446,8 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
         chat_history=chat_history,
         collected_data=collected_data,
         draft_schedule=draft_schedule,
-        user_msg=payload.message
+        user_msg=payload.message,
+        user_name=user_name
     )
 
     if "error" in ai_result:
@@ -539,12 +570,16 @@ async def update_schedule_weights(payload: UpdateWeightsPayload):
 @app.post("/knowledge/evaluate")
 async def evaluate_understanding(payload: EvaluatePayload):
     """학생의 구술 설명을 AI가 평가하여 점수(0~100)와 피드백을 반환"""
-    prompt = f"""
-학생이 방금 공부한 [{payload.subject}] 목표에 대해 자기만의 언어로 달성 과정을 설명했습니다.
-학생의 설명: "{payload.explanation}"
+    user_info = context.user_repo.get_user_info(payload.session_id)
+    user_name = user_info["name"] if (user_info and "name" in user_info) else "학생"
 
-학생이 단순히 지식을 나열하는 것이 아니라, 자기만의 언어로 이해했는지, 그리고 학습 과정에서 어려웠던 점을 극복하려는 '메타인지적 노력'이 보이는지 중점적으로 평가해 주세요.
-이 설명을 평가하여 0에서 100 사이의 점수와 짧고 격려하는 피드백(1~2문장)을 주세요.
+    prompt = f"""
+수험생 이름: {user_name}
+{user_name} 수험생이 방금 공부한 [{payload.subject}] 목표에 대해 자기만의 언어로 달성 과정을 설명했습니다.
+{user_name} 수험생의 설명: "{payload.explanation}"
+
+{user_name} 수험생이 단순히 지식을 나열하는 것이 아니라, 자기만의 언어로 이해했는지, 그리고 학습 과정에서 어려웠던 점을 극복하려는 '메타인지적 노력'이 보이는지 중점적으로 평가해 주세요.
+이 설명을 평가하여 0에서 100 사이의 점수와 짧고 격려하는 피드백(1~2문장)을 주세요. 피드백 작성 시 반드시 {user_name} 님의 이름을 넣어서 다정하고 친근하게 격려해 주세요. (예: "{user_name} 님, 오늘 ...")
 출력은 반드시 아래 JSON 구조여야 합니다.
 {{
   "score": 85,

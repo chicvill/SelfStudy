@@ -12,7 +12,7 @@ interface StudentDashboardProps {
   onReschedule: () => void;
 }
 
-export default function StudentDashboard({ sessionId, onReschedule }: StudentDashboardProps) {
+export default function StudentDashboard({ sessionId, onReschedule: _onReschedule }: StudentDashboardProps) {
   const [schedule, setSchedule] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
@@ -267,7 +267,7 @@ export default function StudentDashboard({ sessionId, onReschedule }: StudentDas
     return diffDays;
   };
 
-  const checkIsTardy = (dateStr: string, actualIn: string | null, scheduledIn: string | null) => {
+  const checkIsTardy = (_dateStr: string, actualIn: string | null, scheduledIn: string | null) => {
     if (!actualIn || !scheduledIn) return false;
     const [actH, actM] = actualIn.split(':').map(Number);
     const [schH, schM] = scheduledIn.split(':').map(Number);
