@@ -32,7 +32,7 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   // 성취율 상태
   const [achievementRates, setAchievementRates] = useState<Record<string, number>>({});
   const [attendance, setAttendance] = useState<any[]>([]);
-  const [managementType, setManagementType] = useState<string>('독학형');
+  const [managementType, setManagementType] = useState<string>('자율형');
   const [scheduledTimes, setScheduledTimes] = useState<any>({});
   const [voucherExpiry, setVoucherExpiry] = useState<string>('');
 
@@ -74,7 +74,7 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
     try {
       const resp = await axios.get(`${API_URL}/knowledge/profile/${sessionId}`);
       if (resp.data.data) {
-        setManagementType(resp.data.data['관리방식'] || '독학형');
+        setManagementType(resp.data.data['관리방식'] || '자율형');
         setScheduledTimes(resp.data.data['등하원예약시간'] || {});
         setVoucherExpiry(resp.data.data['이용권만료일'] || '');
       }
@@ -321,8 +321,8 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   return (
     <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, minHeight: 0, paddingBottom: '20px' }}>
       
-      {/* 독학형 관리형 전환 권유 배너 */}
-      {managementType === '독학형' && (
+      {/* 자율형 관리형 전환 권유 배너 */}
+      {managementType === '자율형' && (
         <div style={{
           background: '#e3f2fd',
           color: '#0d47a1',

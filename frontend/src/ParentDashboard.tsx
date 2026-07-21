@@ -10,7 +10,7 @@ export default function ParentDashboard() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [attendance, setAttendance] = useState<any[]>([]);
-  const [managementType, setManagementType] = useState<string>('독학형');
+  const [managementType, setManagementType] = useState<string>('자율형');
   const [voucherExpiry, setVoucherExpiry] = useState<string>('');
 
   // 3-way messaging
@@ -51,7 +51,7 @@ export default function ParentDashboard() {
       }
       const profResp = await axios.get(`${API_URL}/knowledge/profile/${sessId}`);
       if (profResp.data.data) {
-        setManagementType(profResp.data.data['관리방식'] || '독학형');
+        setManagementType(profResp.data.data['관리방식'] || '자율형');
         setVoucherExpiry(profResp.data.data['이용권만료일'] || '');
       }
       const msgsResp = await axios.get(`${API_URL}/knowledge/messages/${sessId}`);

@@ -16,7 +16,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   // Who
   const [ageGroup, setAgeGroup] = useState('');
   const [currentLevel, setCurrentLevel] = useState('');
-  const [managementType, setManagementType] = useState('독학형'); // '독학형' or '관리형'
+  const [managementType, setManagementType] = useState('자율형'); // '자율형' or '관리형'
   
   // Active days list
   const [activeDaysList, setActiveDaysList] = useState<string[]>(['월', '화', '수', '목', '금']);
@@ -58,7 +58,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
           }
           
           setWantsBuffer(profile['예비일_선호'] !== false);
-          setManagementType(profile['관리방식'] || '독학형');
+          setManagementType(profile['관리방식'] || '자율형');
           if (profile['등하원예약시간']) {
             // Merge defaults with loaded profile scheduled times
             setScheduledTimes(prev => {
@@ -221,8 +221,8 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>관리 방식 선택 (필수)</label>
             <div style={{ display: 'flex', gap: '20px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '15px', color: '#555', fontWeight: 'bold' }}>
-                <input type="radio" name="managementType" value="독학형" checked={managementType === '독학형'} onChange={e => setManagementType(e.target.value)} style={{ width: '18px', height: '18px' }} />
-                🎒 독학형 (스스로 학습 관리)
+                <input type="radio" name="managementType" value="자율형" checked={managementType === '자율형'} onChange={e => setManagementType(e.target.value)} style={{ width: '18px', height: '18px' }} />
+                🎒 자율형 (스스로 학습 관리)
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '15px', color: '#555', fontWeight: 'bold' }}>
                 <input type="radio" name="managementType" value="관리형" checked={managementType === '관리형'} onChange={e => setManagementType(e.target.value)} style={{ width: '18px', height: '18px' }} />

@@ -361,7 +361,7 @@ export default function AdminDashboard() {
               </div>
               <div style={{ display: 'flex', gap: '5px', marginTop: '6px', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', background: s.form_data?.관리방식 === '관리형' ? '#ffe0b2' : '#e0e0e0', color: s.form_data?.관리방식 === '관리형' ? '#e65100' : '#666', padding: '2px 6px', borderRadius: '4px' }}>
-                  {s.form_data?.관리방식 || '독학형'}
+                  {s.form_data?.관리방식 || '자율형'}
                 </span>
                 {s.form_data?.이용권만료일 && (
                   <span style={{ fontSize: '10px', color: '#888' }}>
