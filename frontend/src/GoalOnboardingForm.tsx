@@ -229,6 +229,9 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                 🏫 관리형 (관리자 상담 및 등하원 시간 체크)
               </label>
             </div>
+            <div style={{ marginTop: '12px', padding: '12px 15px', borderRadius: '8px', background: '#e8f5e9', color: '#2e7d32', fontSize: '13px', border: '1px solid #c8e6c9', maxWidth: '600px', lineHeight: '1.4' }}>
+              💡 <strong>관리형 추천 안내</strong>: 관리자의 1:1 대면 상담 및 밀착 출결 피드백 등으로 성취도를 높일 수 있습니다. 집중적인 관리를 희망하신다면 <strong>[관리형]</strong> 선택을 적극 권장합니다.
+            </div>
           </div>
         </div>
 

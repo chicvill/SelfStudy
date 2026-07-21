@@ -321,6 +321,30 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   return (
     <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, minHeight: 0, paddingBottom: '20px' }}>
       
+      {/* 독학형 관리형 전환 권유 배너 */}
+      {managementType === '독학형' && (
+        <div style={{
+          background: '#e3f2fd',
+          color: '#0d47a1',
+          border: '1px solid #bbdefb',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '500',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          flexShrink: 0
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🎒 관리형 전환 안내
+          </div>
+          <div>
+            관리자의 1:1 대면 상담 및 밀착 출결 피드백 등으로 성취도를 높일 수 있습니다. 관리자에게 문의 바랍니다.
+          </div>
+        </div>
+      )}
+
       {/* 이용권 만료 사전 안내 배너 */}
       {remainingDays !== null && remainingDays <= 7 && (
         <div style={{

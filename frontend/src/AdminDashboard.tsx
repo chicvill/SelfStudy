@@ -41,9 +41,9 @@ export default function AdminDashboard() {
       const res = await axios.get(`${API_URL}/knowledge/admin/students`);
       if (res.data.status === 'success') {
         setStudents(res.data.data);
-        if (res.data.data.length > 0 && !selectedStudent) {
-          const firstStd = res.data.data[0];
-          setSelectedStudent(firstStd.user_id);
+        const managedStudents = res.data.data.filter((s: any) => s.form_data?.관리방식 === '관리형');
+        if (managedStudents.length > 0 && !selectedStudent) {
+          setSelectedStudent(managedStudents[0].user_id);
         }
       }
     } catch (err) {
@@ -256,12 +256,14 @@ export default function AdminDashboard() {
 
   const daysOfWeek = ['월', '화', '수', '목', '금', '토', '일'];
 
-  // Filter students based on search query
-  const filteredStudents = students.filter(s => 
-    s.user_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.name && s.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (s.form_data?.목표 && s.form_data.목표.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Filter students based on search query (관리형만 관리자 상담 대상)
+  const filteredStudents = students
+    .filter(s => s.form_data?.관리방식 === '관리형')
+    .filter(s => 
+      s.user_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.name && s.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.form_data?.목표 && s.form_data.목표.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
   // Get current status for selected date
   const selectedDateLog = attendanceHistory.find(h => h.date === date);
