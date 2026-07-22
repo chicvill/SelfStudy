@@ -1,5 +1,5 @@
 FROM python:3.11-slim
-# Cloud Run deployment trigger update
+# Cloud Run build trigger: 2026-07-22
 WORKDIR /app
 
 # Install dependencies
