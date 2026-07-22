@@ -12,6 +12,11 @@ __pycache__/
 venv/
 env/
 
+# Database
+*.db
+*.sqlite3
+backend/selfstudy.db
+
 # Node
 node_modules/
 dist/
