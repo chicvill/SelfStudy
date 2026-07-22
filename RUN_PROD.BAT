@@ -8,8 +8,8 @@ if exist .env (
     )
 )
 
-echo 1. Starting Backend API server (Port 8001)...
-start "SelfStudy Backend" cmd /k "cd backend && call .venv\Scripts\activate.bat && uvicorn main:app --host 0.0.0.0 --port 8001"
+echo 1. Backend is now running 24/7 on Google Cloud Run! (Skipping local backend)
+:: start "SelfStudy Backend" cmd /k "cd backend && call .venv\Scripts\activate.bat && uvicorn main:app --host 0.0.0.0 --port 8001"
 
 echo 2. Building Frontend React Application...
 cd frontend
