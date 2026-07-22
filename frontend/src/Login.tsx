@@ -54,6 +54,8 @@ export default function Login({ onLogin }: LoginProps) {
           localStorage.setItem('selfstudy_saved_user_id', id);
           localStorage.setItem('selfstudy_saved_user_name', res.data.name || '');
           onLogin(id);
+        } else {
+          alert(res.data.message || "로그인에 실패했습니다.");
         }
       } else {
         const res = await axios.post(`${API_URL}/knowledge/signup`, { user_id: id, password: pw, name: name.trim() });
@@ -63,10 +65,13 @@ export default function Login({ onLogin }: LoginProps) {
           setIsLoginMode(true);
           setPassword('');
           setName('');
+        } else {
+          alert(res.data.message || "회원가입에 실패했습니다.");
         }
       }
     } catch (err: any) {
-      alert(err.response?.data?.detail || "오류가 발생했습니다.");
+      const msg = err.response?.data?.message || err.response?.data?.detail || err.message || "오류가 발생했습니다.";
+      alert(`[오류 상세] ${msg}`);
     }
     setLoading(false);
   };
