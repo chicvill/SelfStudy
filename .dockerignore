@@ -1,0 +1,10 @@
+.venv
+backend/.venv
+frontend
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+*.db
+backend/selfstudy.db
