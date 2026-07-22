@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uuid
 import uvicorn
+import asyncio
+from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -47,16 +49,37 @@ class AppContext:
 # Initialize context
 context = AppContext()
 
+async def keepalive_loop():
+    print("[INFO] Render & Supabase Keep-Alive background task started (Interval: 5 minutes)...")
+    while True:
+        try:
+            success = context.db_manager.ping_keepalive(1)
+            if success:
+                print(f"[KEEPALIVE] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Saved 1 to Supabase/DB (keepalive_ping).")
+        except Exception as e:
+            print(f"[KEEPALIVE ERR] {e}")
+        await asyncio.sleep(300) # Every 5 minutes
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[INFO] Initializing App Context (and Knowledge Base)...")
-    yield
+    keepalive_task = asyncio.create_task(keepalive_loop())
+    try:
+        yield
+    finally:
+        keepalive_task.cancel()
 
 app = FastAPI(
     title="SelfStudy Knowledge Base API",
     description="RAG 기반 비정형 목표 달성 및 스케줄러 SaaS",
     lifespan=lifespan
 )
+
+@app.get("/api/ping")
+def ping():
+    context.db_manager.ping_keepalive(1)
+    return {"status": "ok", "keepalive": 1, "timestamp": datetime.now().isoformat()}
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -245,7 +268,7 @@ async def search_knowledge(tags: str):
 
 @app.post("/knowledge/signup")
 async def signup(payload: AuthPayload):
-    success = context.user_repo.register_user(payload.user_id, payload.password, payload.name)
+    success = context.user_repo.register_user(payload.user_id, payload.password, payload.name or "")
     if success:
         return {"status": "success", "success": True, "message": "User registered successfully"}
     else:

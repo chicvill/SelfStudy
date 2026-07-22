@@ -2,21 +2,100 @@ import sqlite3
 import json
 import os
 from contextlib import contextmanager
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Load env variables from workspace root .env if present
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+
+
+class CursorAdapter:
+    def __init__(self, cursor, is_postgres: bool):
+        self._cursor = cursor
+        self.is_postgres = is_postgres
+
+    def execute(self, query: str, params=()):
+        if self.is_postgres:
+            query = query.replace('?', '%s')
+        return self._cursor.execute(query, params)
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    @property
+    def rowcount(self):
+        return getattr(self._cursor, 'rowcount', -1)
+
+
+class ConnectionWrapper:
+    def __init__(self, conn, is_postgres: bool):
+        self._conn = conn
+        self.is_postgres = is_postgres
+
+    def cursor(self):
+        return CursorAdapter(self._conn.cursor(), self.is_postgres)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
 
 class DatabaseManager:
-    def __init__(self, db_file: str = None):
-        if db_file is None:
-            db_file = os.path.join(os.path.dirname(__file__), 'selfstudy.db')
-        self.db_file = db_file
+    def __init__(self, db_file: str | None = None):
+        self.db_url = os.getenv("DATABASE_URL", "").strip()
+        
+        if self.db_url and (self.db_url.startswith("postgresql://") or self.db_url.startswith("postgres://")):
+            if not HAS_PSYCOPG2:
+                print("[WARN] DATABASE_URL is set to PostgreSQL/Supabase but psycopg2 is not installed. Falling back to SQLite.")
+                self.is_postgres = False
+            else:
+                self.is_postgres = True
+        else:
+            self.is_postgres = False
+
+        if not self.is_postgres:
+            if db_file is None:
+                db_file = os.path.join(os.path.dirname(__file__), 'selfstudy.db')
+            self.db_file = db_file
+
         self.init_study_knowledge_db()
 
     def get_db_conn(self):
         try:
-            conn = sqlite3.connect(self.db_file, check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            return conn
+            if self.is_postgres:
+                conn_url = self.db_url
+                if conn_url.startswith("postgres://"):
+                    conn_url = conn_url.replace("postgres://", "postgresql://", 1)
+                conn = psycopg2.connect(conn_url, cursor_factory=RealDictCursor)
+                return ConnectionWrapper(conn, is_postgres=True)
+            else:
+                conn = sqlite3.connect(self.db_file, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                return ConnectionWrapper(conn, is_postgres=False)
         except Exception as e:
-            print(f"DB Connection Error: {e}")
+            db_type = "PostgreSQL (Supabase)" if self.is_postgres else "SQLite"
+            print(f"DB Connection Error ({db_type}): {e}")
             return None
 
     @contextmanager
@@ -33,8 +112,25 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def ping_keepalive(self, val: int = 1) -> bool:
+        """Render 잠듦 방지 및 Supabase 연결 유지를 위한 주기적 val(1) 저장"""
+        try:
+            with self.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO keepalive_ping (id, val, updated_at)
+                    VALUES (1, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(id) DO UPDATE SET
+                        val = excluded.val,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (val,))
+                return True
+        except Exception as e:
+            print(f"[KEEPALIVE ERR] {e}")
+            return False
+
     def init_study_knowledge_db(self):
-        """지식정보창고(Knowledge Base) 기반의 RAG DB 스키마 생성 (SQLite)"""
+        """지식정보창고(Knowledge Base) 기반 DB 스키마 생성 (SQLite / PostgreSQL)"""
         conn = self.get_db_conn()
         if not conn:
             print("[ERR] Failed to connect DB for init_study_knowledge_db")
@@ -42,7 +138,16 @@ class DatabaseManager:
         try:
             cur = conn.cursor()
             
-            # 지식정보창고 핵심 테이블 (JSONB -> TEXT, TEXT[] -> TEXT)
+            # 1. Render & Supabase 핑 유지용 테이블
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS keepalive_ping (
+                    id INT PRIMARY KEY DEFAULT 1,
+                    val INT DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 2. 지식정보창고 핵심 테이블
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS study_knowledge_bundles (
                     id TEXT PRIMARY KEY,
@@ -53,7 +158,7 @@ class DatabaseManager:
                 )
             """)
             
-            # 대화형 온보딩 세션 테이블
+            # 3. 대화형 온보딩 세션 테이블
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS study_chat_sessions (
                     session_id TEXT PRIMARY KEY,
@@ -62,13 +167,13 @@ class DatabaseManager:
                     chat_history TEXT DEFAULT '[]',
                     collected_data TEXT DEFAULT '{}',
                     draft_schedule TEXT DEFAULT NULL,
-                    is_finalized BOOLEAN DEFAULT 0,
+                    is_finalized BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
-            # 사용자(Login) 테이블
+            # 4. 사용자(Login) 테이블
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY,
@@ -78,7 +183,7 @@ class DatabaseManager:
                 )
             """)
             
-            # 유저별 최신 프로필 폼 저장용 테이블
+            # 5. 유저별 최신 프로필 폼 저장용 테이블
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS user_profiles (
                     user_id TEXT PRIMARY KEY,
@@ -87,62 +192,79 @@ class DatabaseManager:
                 )
             """)
             
-            # 출석체크 테이블
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS attendance (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    check_in_time TEXT,
-                    check_out_time TEXT,
-                    is_managed BOOLEAN DEFAULT 0,
-                    consult_checked BOOLEAN DEFAULT 0,
-                    consult_note TEXT DEFAULT '',
-                    scheduled_in_time TEXT,
-                    scheduled_out_time TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(session_id, date)
-                )
-            """)
-            
-            # 3자 실시간 메시지 테이블
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS study_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    sender_role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # 6. 출석체크 테이블 및 메시지 테이블
+            if self.is_postgres:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS attendance (
+                        id SERIAL PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        check_in_time TEXT,
+                        check_out_time TEXT,
+                        is_managed BOOLEAN DEFAULT FALSE,
+                        consult_checked BOOLEAN DEFAULT FALSE,
+                        consult_note TEXT DEFAULT '',
+                        scheduled_in_time TEXT,
+                        scheduled_out_time TEXT,
+                        consult_start_time TEXT,
+                        tag_count INTEGER DEFAULT 0,
+                        tag1_time TEXT,
+                        tag2_time TEXT,
+                        tag3_time TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(session_id, date)
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS study_messages (
+                        id SERIAL PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        sender_role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            else:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS attendance (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        check_in_time TEXT,
+                        check_out_time TEXT,
+                        is_managed BOOLEAN DEFAULT 0,
+                        consult_checked BOOLEAN DEFAULT 0,
+                        consult_note TEXT DEFAULT '',
+                        scheduled_in_time TEXT,
+                        scheduled_out_time TEXT,
+                        consult_start_time TEXT,
+                        tag_count INTEGER DEFAULT 0,
+                        tag1_time TEXT,
+                        tag2_time TEXT,
+                        tag3_time TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(session_id, date)
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS study_messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        sender_role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
 
-            # 스키마 마이그레이션 (컬럼 동적 추가)
-            for col, col_type in [
-                ("scheduled_in_time", "TEXT"),
-                ("scheduled_out_time", "TEXT"),
-                ("consult_start_time", "TEXT"),
-                ("tag_count", "INTEGER DEFAULT 0"),
-                ("tag1_time", "TEXT"),
-                ("tag2_time", "TEXT"),
-                ("tag3_time", "TEXT")
-            ]:
-                try:
-                    cur.execute(f"ALTER TABLE attendance ADD COLUMN {col} {col_type}")
-                except sqlite3.OperationalError:
-                    pass
-            
-            # users 테이블 name 컬럼 추가 마이그레이션
-            try:
-                cur.execute("ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''")
-            except sqlite3.OperationalError:
-                pass
-            
             # 관리자 계정 기본 세팅 (010-1111-2222 / 1212)
-            cur.execute("INSERT OR IGNORE INTO users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')")
-            cur.execute("UPDATE users SET name = '관리자' WHERE user_id = '010-1111-2222' AND (name IS NULL OR name = '')")
+            cur.execute("""
+                INSERT INTO users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')
+                ON CONFLICT(user_id) DO UPDATE SET name = '관리자'
+            """)
             
             conn.commit()
-            print("[OK] SQLite study_knowledge_bundles schema initialized successfully.")
+            db_type_str = "PostgreSQL (Supabase)" if self.is_postgres else "SQLite"
+            print(f"[OK] {db_type_str} database schema initialized successfully.")
         except Exception as e:
             conn.rollback()
             print(f"[ERR] Study DB Init Error: {e}")
@@ -154,11 +276,11 @@ class UserRepository:
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
 
-    def register_user(self, user_id: str, password: str, name: str = '') -> bool:
+    def register_user(self, user_id: str, password: str, name: str | None = '') -> bool:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("INSERT INTO users (user_id, password, name) VALUES (?, ?, ?)", (user_id, password, name))
+                cur.execute("INSERT INTO users (user_id, password, name) VALUES (?, ?, ?)", (user_id, password, name or ''))
                 return True
         except Exception as e:
             print(f"Register Error: {e}")
@@ -177,7 +299,7 @@ class UserRepository:
             print(f"Verify Error: {e}")
             return False
 
-    def get_user_info(self, user_id: str) -> dict:
+    def get_user_info(self, user_id: str) -> dict | None:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
