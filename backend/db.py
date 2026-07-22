@@ -175,7 +175,7 @@ class DatabaseManager:
             
             # 4. 사용자(Login) 테이블
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
+                CREATE TABLE IF NOT EXISTS study_users (
                     user_id TEXT PRIMARY KEY,
                     password TEXT NOT NULL,
                     name TEXT DEFAULT '',
@@ -258,7 +258,7 @@ class DatabaseManager:
 
             # 관리자 계정 기본 세팅 (010-1111-2222 / 1212)
             cur.execute("""
-                INSERT INTO users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')
+                INSERT INTO study_users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')
                 ON CONFLICT(user_id) DO UPDATE SET name = '관리자'
             """)
             
@@ -280,7 +280,7 @@ class UserRepository:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("INSERT INTO users (user_id, password, name) VALUES (?, ?, ?)", (user_id, password, name or ''))
+                cur.execute("INSERT INTO study_users (user_id, password, name) VALUES (?, ?, ?)", (user_id, password, name or ''))
                 return True
         except Exception as e:
             print(f"Register Error: {e}")
@@ -290,7 +290,7 @@ class UserRepository:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT password FROM users WHERE user_id = ?", (user_id,))
+                cur.execute("SELECT password FROM study_users WHERE user_id = ?", (user_id,))
                 row = cur.fetchone()
                 if row and row['password'] == password:
                     return True
@@ -303,7 +303,7 @@ class UserRepository:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT user_id, password, name FROM users WHERE user_id = ?", (user_id,))
+                cur.execute("SELECT user_id, password, name FROM study_users WHERE user_id = ?", (user_id,))
                 row = cur.fetchone()
                 if row:
                     return dict(row)
@@ -317,7 +317,7 @@ class UserRepository:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
                 cur.execute("""
-                    UPDATE users 
+                    UPDATE study_users 
                     SET name = ?, password = ? 
                     WHERE user_id = ?
                 """, (name, password, user_id))
@@ -362,7 +362,7 @@ class UserRepository:
                 cur.execute("""
                     SELECT up.user_id, up.form_data, up.updated_at, u.name 
                     FROM user_profiles up
-                    LEFT JOIN users u ON up.user_id = u.user_id
+                    LEFT JOIN study_users u ON up.user_id = u.user_id
                 """)
                 rows = cur.fetchall()
                 results = []
