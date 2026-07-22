@@ -268,7 +268,9 @@ async def search_knowledge(tags: str):
 
 @app.post("/knowledge/signup")
 async def signup(payload: AuthPayload):
+    print(f"[DEBUG] Attempting signup for user_id: {payload.user_id}")
     success = context.user_repo.register_user(payload.user_id, payload.password, payload.name or "")
+    print(f"[DEBUG] Signup result for {payload.user_id}: {success}")
     if success:
         return {"status": "success", "success": True, "message": "User registered successfully"}
     else:
@@ -276,8 +278,11 @@ async def signup(payload: AuthPayload):
 
 @app.post("/knowledge/login")
 async def login(payload: AuthPayload):
+    print(f"[DEBUG] Attempting login for user_id: {payload.user_id}")
     user_info = context.user_repo.get_user_info(payload.user_id)
+    print(f"[DEBUG] User info retrieved: {user_info is not None}")
     if user_info and user_info["password"] == payload.password:
+        print(f"[DEBUG] Login successful for {payload.user_id}")
         return {
             "status": "success",
             "success": True,
@@ -285,6 +290,7 @@ async def login(payload: AuthPayload):
             "name": user_info["name"]
         }
     else:
+        print(f"[DEBUG] Login failed for {payload.user_id} - invalid credentials")
         return {"status": "error", "success": False, "message": "Invalid user ID or password"}
 
 class UpdateUserPayload(BaseModel):
