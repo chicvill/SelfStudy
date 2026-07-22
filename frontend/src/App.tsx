@@ -9,7 +9,7 @@ import AdminDashboard from './AdminDashboard';
 import ProfileEdit from './ProfileEdit';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+import { API_URL } from './config';
 
 const generateSessionId = () => "sess_" + Math.random().toString(36).substr(2, 9);
 
