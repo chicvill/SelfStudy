@@ -37,9 +37,33 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMsg, setNewMsg] = useState('');
 
+  // Admin Real-time Emergency Alerts State
+  const [adminAlerts, setAdminAlerts] = useState<{ late_students: any[]; recent_messages: any[] }>({
+    late_students: [],
+    recent_messages: []
+  });
+
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  // Poll real-time admin alerts every 3 seconds
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/knowledge/admin/alerts`);
+        if (res.data.status === 'success' && res.data.data) {
+          setAdminAlerts(res.data.data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchAlerts();
+    const alertInterval = setInterval(fetchAlerts, 3000);
+    return () => clearInterval(alertInterval);
+  }, []);
+
 
   const fetchStudents = async () => {
     try {
@@ -364,10 +388,20 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
               <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
                 목표: {s.form_data?.목표 || '설정 전'}
               </div>
-              <div style={{ display: 'flex', gap: '5px', marginTop: '6px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '5px', marginTop: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '11px', background: s.form_data?.관리방식 === '관리형' ? '#ffe0b2' : '#e0e0e0', color: s.form_data?.관리방식 === '관리형' ? '#e65100' : '#666', padding: '2px 6px', borderRadius: '4px' }}>
                   {s.form_data?.관리방식 || '자율형'}
                 </span>
+                {adminAlerts.late_students.some(l => l.user_id === s.user_id) && (
+                  <span style={{ fontSize: '10px', background: '#f44336', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', animation: 'pulse 1.5s infinite' }}>
+                    🚨 지각 (10분+)
+                  </span>
+                )}
+                {adminAlerts.recent_messages.some(m => m.user_id === s.user_id) && (
+                  <span style={{ fontSize: '10px', background: '#ff9800', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                    💬 메시지
+                  </span>
+                )}
                 {s.form_data?.이용권만료일 && (
                   <span style={{ fontSize: '10px', color: '#888' }}>
                     만료: {s.form_data.이용권만료일.slice(5)}
@@ -404,6 +438,102 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
             </button>
           )}
         </h2>
+
+        {/* 🚨 실시간 긴급 경고 센터 (Emergency Alert Center) */}
+        {(adminAlerts.late_students.length > 0 || adminAlerts.recent_messages.length > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+            {/* 1. 미등원 10분 이상 지각 긴급 경고 */}
+            {adminAlerts.late_students.map(late => (
+              <div
+                key={`late-${late.user_id}`}
+                style={{
+                  background: '#ffebee',
+                  border: '2px solid #ef5350',
+                  borderRadius: '10px',
+                  padding: '14px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '15px',
+                  boxShadow: '0 3px 10px rgba(239, 83, 80, 0.15)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '22px' }}>🚨</span>
+                  <div>
+                    <div style={{ color: '#c62828', fontWeight: 'bold', fontSize: '15px' }}>
+                      [미등원 긴급 지각 경고] {late.name} ({late.user_id})
+                    </div>
+                    <div style={{ color: '#b71c1c', fontSize: '13px', marginTop: '3px' }}>
+                      당일 약속 등원 시간(<strong>{late.scheduled_in}</strong>)보다 <span style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{late.minutes_late}분 경과</span>되었으나 아직 등원하지 않았습니다!
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedStudent(late.user_id)}
+                  style={{
+                    background: '#c62828',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  👉 학생 선택 & 메시지 확인
+                </button>
+              </div>
+            ))}
+
+            {/* 2. 신규 학생/학부모 메시지 알림 */}
+            {adminAlerts.recent_messages.map(msg => (
+              <div
+                key={`msg-${msg.user_id}-${msg.created_at}`}
+                style={{
+                  background: '#fff3e0',
+                  border: '1px solid #ffb74d',
+                  borderRadius: '10px',
+                  padding: '12px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '15px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '20px' }}>💬</span>
+                  <div>
+                    <div style={{ color: '#e65100', fontWeight: 'bold', fontSize: '14px' }}>
+                      [신규 메시지] {msg.name} ({msg.sender_role === 'parent' ? '학부모' : '학생'})
+                    </div>
+                    <div style={{ color: '#bf360c', fontSize: '13px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '500px' }}>
+                      "{msg.content}"
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedStudent(msg.user_id)}
+                  style={{
+                    background: '#e65100',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  💬 소통방 바로가기
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {selectedStudent ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
