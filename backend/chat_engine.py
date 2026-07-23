@@ -20,8 +20,12 @@ class ChatEngine:
         - Mode 2 (current_stage == 2): 생성된 초안을 대화로 수정 (Refinement)
         - Mode 3 (current_stage == 3): 동적 일정 재조정 (Dynamic Rescheduling)
         """
-        if not self.ai_tutor.gemini_client:
-            return {"error": "AI 엔진 미설정"}
+        import os
+        raw_o_key = os.getenv("OPENAI_API_KEY", "")
+        openai_key = raw_o_key.strip("'\" \t") if raw_o_key else ""
+        has_openai = bool(openai_key and not openai_key.startswith("MY_"))
+        if not self.ai_tutor.gemini_client and not has_openai:
+            return {"error": "AI 엔진 미설정 (.env 파일의 GEMINI_API_KEY 또는 OPENAI_API_KEY를 확인하세요)"}
 
         name_instruction = f"\n[중요] 수험생의 이름은 '{user_name}'입니다. 대화 시 반드시 '{user_name} 님'이라고 다정하고 친근하게 부르며 다정하게 격려해 주세요.\n" if user_name else ""
 

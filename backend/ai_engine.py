@@ -92,12 +92,12 @@ class AITutor:
             except Exception as e:
                 print(f"[GEMINI ERROR] Exception: {e}")
                 if not has_openai:
-                    return {"error": f"Gemini 오류 및 OpenAI 미설정: {str(e)}"}
+                    return {"error": f"Gemini API 오류 ({str(e)}). .env 파일의 GEMINI_API_KEY를 올바른 Key(AIzaSy...)로 수정하거나 OpenAI API Key를 등록해주세요."}
                 print("[WARN] Gemini failed. Falling back to OpenAI (async)...")
         
         # 2. Fallback to OpenAI (Async using httpx)
         if not has_openai:
-            return {"error": "AI 엔진 미설정 (Gemini 실패 및 OpenAI 키 없음)"}
+            return {"error": "AI 엔진 미설정 (.env 파일의 GEMINI_API_KEY 또는 OPENAI_API_KEY를 확인하세요)"}
             
         headers = {
             "Content-Type": "application/json",
@@ -156,8 +156,11 @@ class AITutor:
         RAG 아키텍처: 주어진 태그로 과거 지식(유사한 목표, 일정, 실패/성공 사례)을 검색하고,
         이를 프롬프트의 맥락(Context)으로 제공하여 완전히 새로운 맞춤형 일정을 생성.
         """
-        if not self.gemini_client:
-            return {"error": "AI 엔진 미설정. (GEMINI_API_KEY 확인)"}
+        raw_o_key = os.getenv("OPENAI_API_KEY", "")
+        openai_key = raw_o_key.strip("'\" \t") if raw_o_key else ""
+        has_openai = bool(openai_key and not openai_key.startswith("MY_"))
+        if not self.gemini_client and not has_openai:
+            return {"error": "AI 엔진 미설정 (.env 파일의 GEMINI_API_KEY 또는 OPENAI_API_KEY를 확인하세요)"}
 
         # 1. 지식정보창고 검색 (Retrieval)
         context_text = self._build_context(tags)
