@@ -992,11 +992,14 @@ async def api_nfc_tag(payload: NfcTagPayload):
 def get_dist_dir():
     possible_paths = [
         os.path.join(os.path.dirname(__file__), "dist"),
+        os.path.join(os.path.dirname(__file__), "backend", "dist"),
         os.path.join(os.getcwd(), "dist"),
-        "/app/dist"
+        os.path.join(os.getcwd(), "backend", "dist"),
+        "/app/dist",
+        "/app/backend/dist"
     ]
     for p in possible_paths:
-        if os.path.exists(p) and os.path.isdir(p):
+        if p and os.path.exists(p) and os.path.isdir(p):
             return p
     return None
 
