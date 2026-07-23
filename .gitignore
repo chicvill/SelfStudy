@@ -19,9 +19,10 @@ backend/selfstudy.db
 
 # Node
 node_modules/
-dist/
 build/
 .npm/
+!backend/dist/
+!backend/dist/**
 
 # IDE
 .vscode/
