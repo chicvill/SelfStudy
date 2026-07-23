@@ -41,13 +41,28 @@ if exist .env (
     echo [.env found] Parsing environment variables...
     for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
         if "%%A"=="GEMINI_API_KEY" set "GEMINI_API_KEY=%%B"
+        if "%%A"=="GEMINI_MODEL" set "GEMINI_MODEL=%%B"
+        if "%%A"=="OPENAI_API_KEY" set "OPENAI_API_KEY=%%B"
         if "%%A"=="DATABASE_URL" set "DATABASE_URL=%%B"
         if "%%A"=="CLOUDFLARE_TUNNEL_TOKEN" set "CLOUDFLARE_TUNNEL_TOKEN=%%B"
     )
 )
 
 if not "%GEMINI_API_KEY%"=="" set "ENV_VARS=GEMINI_API_KEY=%GEMINI_API_KEY%"
-
+if not "%GEMINI_MODEL%"=="" (
+    if not "%ENV_VARS%"=="" (
+        set "ENV_VARS=%ENV_VARS%,GEMINI_MODEL=%GEMINI_MODEL%"
+    ) else (
+        set "ENV_VARS=GEMINI_MODEL=%GEMINI_MODEL%"
+    )
+)
+if not "%OPENAI_API_KEY%"=="" (
+    if not "%ENV_VARS%"=="" (
+        set "ENV_VARS=%ENV_VARS%,OPENAI_API_KEY=%OPENAI_API_KEY%"
+    ) else (
+        set "ENV_VARS=OPENAI_API_KEY=%OPENAI_API_KEY%"
+    )
+)
 if not "%DATABASE_URL%"=="" (
     if not "%ENV_VARS%"=="" (
         set "ENV_VARS=%ENV_VARS%,DATABASE_URL=%DATABASE_URL%"

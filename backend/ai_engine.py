@@ -2,6 +2,7 @@ import os
 import json
 import re
 import httpx
+from typing import Any
 from dotenv import load_dotenv, find_dotenv
 from google import genai
 from google.genai import types
@@ -11,8 +12,10 @@ load_dotenv(find_dotenv(), override=True)
 class AITutor:
     def __init__(self, knowledge_repo=None):
         self.knowledge_repo = knowledge_repo
-        self.gemini_key = os.getenv("GEMINI_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        raw_g_key = os.getenv("GEMINI_API_KEY", "")
+        self.gemini_key = raw_g_key.strip("'\" \t") if raw_g_key else ""
+        raw_g_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.gemini_model = raw_g_model.strip("'\" \t") if raw_g_model else "gemini-2.0-flash"
         self.gemini_client = None
 
         if self.gemini_key and not self.gemini_key.startswith("MY_"):
@@ -46,8 +49,9 @@ class AITutor:
         """
         Unified LLM caller. Tries Gemini async first, falls back to OpenAI async if Gemini fails.
         """
-        openai_key = os.getenv("OPENAI_API_KEY")
-        has_openai = openai_key and not openai_key.startswith("MY_")
+        raw_o_key = os.getenv("OPENAI_API_KEY", "")
+        openai_key = raw_o_key.strip("'\" \t") if raw_o_key else ""
+        has_openai = bool(openai_key and not openai_key.startswith("MY_"))
         
         # 1. Try Gemini first
         if self.gemini_client:
@@ -121,7 +125,7 @@ class AITutor:
         else:
             openai_messages.append({"role": "user", "content": prompt})
             
-        payload = {
+        payload: dict[str, Any] = {
             "model": "gpt-4o-mini",
             "messages": openai_messages,
             "temperature": temperature
