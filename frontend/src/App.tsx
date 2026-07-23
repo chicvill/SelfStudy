@@ -102,6 +102,16 @@ function App() {
     setIsSidebarOpen(false);
   };
 
+  const handleLogout = () => {
+    setLoggedInUserId(null);
+    setUserName('');
+    setIsOnboarded(false);
+    setActiveScheduleId(null);
+    setIsSidebarOpen(false);
+    localStorage.removeItem('selfstudy_saved_user_id');
+    localStorage.removeItem('selfstudy_saved_user_name');
+  };
+
   const handleMenuClick = (tab: any, isOnboardedVal: boolean) => {
     setCurrentTab(tab);
     setIsOnboarded(isOnboardedVal);
@@ -162,14 +172,14 @@ function App() {
       <div style={{
         position: 'fixed', top: 0, left: isSidebarOpen ? 0 : '-300px', width: '280px', height: '100vh',
         background: '#fff', zIndex: 1000, transition: 'left 0.3s ease', boxShadow: '5px 0 15px rgba(0,0,0,0.2)',
-        display: 'flex', flexDirection: 'column', padding: '20px'
+        display: 'flex', flexDirection: 'column', padding: '20px', boxSizing: 'border-box'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
           <button onClick={() => setIsSidebarOpen(false)} style={{ background: 'transparent', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#555' }}>✕</button>
         </div>
         
         <h3 style={{ margin: '0 0 20px 0', color: '#1976d2' }}>메뉴</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
           {loggedInUserId === '010-1111-2222' ? (
             <button onClick={() => handleMenuClick('admin', true)} style={sidebarButtonStyle(currentTab === 'admin')}>🏫 관리 대시보드</button>
           ) : (
@@ -177,7 +187,7 @@ function App() {
               <button onClick={() => handleMenuClick('student', true)} style={sidebarButtonStyle(currentTab === 'student')}>📈 나의 대시보드</button>
               <button onClick={() => handleMenuClick('onboarding', false)} style={sidebarButtonStyle(currentTab === 'onboarding' && !isOnboarded)}>📝 목표 및 개인정보 설정</button>
               
-              <div style={{ padding: '10px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ padding: '10px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <button 
                   onClick={() => activeScheduleId ? handleReschedule() : alert('확정된 일정이 없습니다.')} 
                   style={sidebarButtonStyle(false)}
@@ -197,6 +207,30 @@ function App() {
           <button onClick={() => handleMenuClick('profile_edit', true)} style={sidebarButtonStyle(currentTab === 'profile_edit')}>👤 개인 정보 수정</button>
           <button onClick={() => handleMenuClick('browser', true)} style={sidebarButtonStyle(currentTab === 'browser')}>📖 지식창고 탐색</button>
           <button onClick={() => handleMenuClick('parent', true)} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관</button>
+        </div>
+
+        {/* 로그아웃 버튼 */}
+        <div style={{ marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+          <button 
+            onClick={handleLogout} 
+            style={{
+              width: '100%',
+              background: '#fff0f0',
+              color: '#d32f2f',
+              border: '1px solid #ffcdd2',
+              padding: '12px 15px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              textAlign: 'left',
+              fontSize: '15px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            🚪 로그아웃
+          </button>
         </div>
       </div>
 
@@ -230,7 +264,7 @@ function App() {
         {currentTab === 'student' && <StudentDashboard sessionId={sessionId} onReschedule={handleReschedule} />}
         {currentTab === 'browser' && <KnowledgeBrowser />}
         {currentTab === 'parent' && <ParentDashboard />}
-        {currentTab === 'admin' && <AdminDashboard />}
+        {currentTab === 'admin' && <AdminDashboard onLogout={handleLogout} />}
         {currentTab === 'profile_edit' && (
           <ProfileEdit 
             userId={loggedInUserId!} 

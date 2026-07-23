@@ -3,7 +3,11 @@ import axios from 'axios';
 
 import { API_URL } from './config';
 
-export default function AdminDashboard() {
+interface AdminDashboardProps {
+  onLogout?: () => void;
+}
+
+export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
@@ -379,8 +383,25 @@ export default function AdminDashboard() {
 
       {/* 우측 메인 대시보드 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '30px' }}>
-        <h2 style={{ color: '#1976d2', marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-          🏫 관리 대시보드
+        <h2 style={{ color: '#1976d2', marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>🏫 관리 대시보드</span>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              style={{
+                background: '#fff0f0',
+                color: '#d32f2f',
+                border: '1px solid #ffcdd2',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              🚪 로그아웃
+            </button>
+          )}
         </h2>
 
         {selectedStudent ? (
