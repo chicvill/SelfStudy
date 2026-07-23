@@ -989,20 +989,38 @@ async def api_nfc_tag(payload: NfcTagPayload):
         conn.close()
 
 # ----------------- Static File Hosting & SPA Fallback -----------------
-DIST_DIR = os.path.join(os.path.dirname(__file__), "dist")
-if os.path.exists(DIST_DIR):
-    assets_dir = os.path.join(DIST_DIR, "assets")
+def get_dist_dir():
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "dist"),
+        os.path.join(os.getcwd(), "dist"),
+        "/app/dist"
+    ]
+    for p in possible_paths:
+        if os.path.exists(p) and os.path.isdir(p):
+            return p
+    return None
+
+dist_dir = get_dist_dir()
+if dist_dir:
+    assets_dir = os.path.join(dist_dir, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("knowledge/"):
-            raise HTTPException(status_code=404, detail="API route not found")
-        file_path = os.path.join(DIST_DIR, full_path)
-        if os.path.isfile(file_path):
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    if full_path.startswith("api/") or full_path.startswith("knowledge/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+    
+    current_dist = get_dist_dir()
+    if current_dist:
+        file_path = os.path.join(current_dist, full_path)
+        if full_path and os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+        index_path = os.path.join(current_dist, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+
+    return {"status": "ok", "message": "SelfStudy Platform Backend API is running.", "notice": "Frontend dist folder not found."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
