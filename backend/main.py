@@ -1,5 +1,8 @@
+import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import uuid
 import uvicorn
@@ -984,6 +987,22 @@ async def api_nfc_tag(payload: NfcTagPayload):
         raise HTTPException(status_code=500, detail=f"NFC 통합 태깅 중 오류: {e}")
     finally:
         conn.close()
+
+# ----------------- Static File Hosting & SPA Fallback -----------------
+DIST_DIR = os.path.join(os.path.dirname(__file__), "dist")
+if os.path.exists(DIST_DIR):
+    assets_dir = os.path.join(DIST_DIR, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("knowledge/"):
+            raise HTTPException(status_code=404, detail="API route not found")
+        file_path = os.path.join(DIST_DIR, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(DIST_DIR, "index.html"))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
