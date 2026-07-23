@@ -3,7 +3,7 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN npm ci || npm install
+RUN npm install
 
 COPY frontend/ ./
 RUN npm run build
@@ -19,9 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source code
 COPY backend/ .
 
-# Copy compiled frontend dist from Stage 1 into /app/dist and /app/backend/dist
-COPY --from=frontend-builder /app/frontend/dist ./dist
-COPY --from=frontend-builder /app/frontend/dist ./backend/dist
+# Copy compiled frontend dist from Stage 1 into all possible dist locations
+COPY --from=frontend-builder /app/frontend/dist /app/dist
+COPY --from=frontend-builder /app/frontend/dist /app/backend/dist
+COPY --from=frontend-builder /app/frontend/dist /dist
 
 # Cloud Run port setting
 ENV PORT=8080

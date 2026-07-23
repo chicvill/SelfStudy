@@ -991,12 +991,13 @@ async def api_nfc_tag(payload: NfcTagPayload):
 # ----------------- Static File Hosting & SPA Fallback -----------------
 def get_dist_dir():
     possible_paths = [
+        "/app/dist",
+        "/app/backend/dist",
+        "/dist",
         os.path.join(os.path.dirname(__file__), "dist"),
         os.path.join(os.path.dirname(__file__), "backend", "dist"),
         os.path.join(os.getcwd(), "dist"),
-        os.path.join(os.getcwd(), "backend", "dist"),
-        "/app/dist",
-        "/app/backend/dist"
+        os.path.join(os.getcwd(), "backend", "dist")
     ]
     for p in possible_paths:
         if p and os.path.exists(p) and os.path.isdir(p):
@@ -1023,7 +1024,17 @@ async def serve_spa(full_path: str):
         if os.path.isfile(index_path):
             return FileResponse(index_path)
 
-    return {"status": "ok", "message": "SelfStudy Platform Backend API is running.", "notice": "Frontend dist folder not found."}
+    return {
+        "status": "ok",
+        "message": "SelfStudy Platform Backend API is running.",
+        "notice": "Frontend dist folder not found.",
+        "debug": {
+            "getcwd": os.getcwd(),
+            "file_dir": os.path.dirname(__file__),
+            "cwd_files": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else [],
+            "file_dir_files": os.listdir(os.path.dirname(__file__)) if os.path.exists(os.path.dirname(__file__)) else []
+        }
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
