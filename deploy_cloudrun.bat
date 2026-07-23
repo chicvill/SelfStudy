@@ -22,7 +22,16 @@ if %errorlevel% neq 0 (
 set SERVICE_NAME=selfstudy
 set REGION=asia-northeast3
 
-echo [INFO] Starting Google Cloud Run deployment...
+echo [1/3] Building React Frontend...
+cd frontend
+call npm run build
+cd ..
+
+echo [2/3] Syncing dist to backend...
+if not exist "backend\dist" mkdir "backend\dist"
+xcopy /E /Y /Q "frontend\dist\*" "backend\dist\"
+
+echo [3/3] Starting Google Cloud Run deployment...
 echo Service Name: %SERVICE_NAME%
 echo Region: %REGION%
 echo.

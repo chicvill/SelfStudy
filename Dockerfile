@@ -19,10 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source code
 COPY backend/ .
 
-# Copy compiled frontend dist from Stage 1 into all possible dist locations
-COPY --from=frontend-builder /app/frontend/dist /app/dist
-COPY --from=frontend-builder /app/frontend/dist /app/backend/dist
-COPY --from=frontend-builder /app/frontend/dist /dist
+# Copy compiled frontend dist directory contents from Stage 1 (trailing slashes required for directories)
+COPY --from=frontend-builder /app/frontend/dist/ /app/dist/
+COPY --from=frontend-builder /app/frontend/dist/ /app/backend/dist/
 
 # Cloud Run port setting
 ENV PORT=8080
