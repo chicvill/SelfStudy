@@ -4,19 +4,10 @@ echo   SelfStudy Platform - Google Cloud Run Deploy Script
 echo ========================================================
 echo.
 
-set GCLOUD_BIN=gcloud
-where gcloud >nul 2>nul
-if %errorlevel% neq 0 (
-    if exist "%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" (
-        set "GCLOUD_BIN=%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
-    ) else if exist "C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" (
-        set "GCLOUD_BIN=C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
-    ) else (
-        echo [ERROR] gcloud CLI is not installed or not in PATH.
-        echo Please install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
-        pause
-        exit /b 1
-    )
+if exist "%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" (
+    set "GCLOUD_BIN=%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
+) else (
+    set GCLOUD_BIN=gcloud
 )
 
 set SERVICE_NAME=selfstudy
