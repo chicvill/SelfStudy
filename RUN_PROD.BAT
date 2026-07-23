@@ -1,32 +1,41 @@
 @echo off
-echo Starting SelfStudy Platform in Production Mode...
+chcp 65001 > nul
+echo ========================================================
+echo   SelfStudy Platform - Local Production Start Script
+echo ========================================================
+echo.
 
 :: Load environment variables from .env
 if exist .env (
+    echo [.env 발견] 환경 변수를 파싱합니다...
     for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
         set "%%A=%%B"
     )
 )
 
-echo 1. Backend is now running 24/7 on Google Cloud Run! (Skipping local backend)
-:: start "SelfStudy Backend" cmd /k "cd backend && call .venv\Scripts\activate.bat && uvicorn main:app --host 0.0.0.0 --port 8001"
-
-echo 2. Building Frontend React Application...
+echo 1. Building Frontend React Application...
 cd frontend
-echo Running npm install...
 call npm install
-echo Building application...
 call npm run build
-echo 3. Starting Frontend Production Server (Port 5220)...
-start "SelfStudy Frontend Prod" cmd /k "npx serve -s dist -p 5220"
 cd ..
+
+echo 2. Syncing frontend dist to backend for Single-Container serving...
+if not exist "backend\dist" mkdir "backend\dist"
+xcopy /E /Y /Q "frontend\dist\*" "backend\dist\"
+
+echo 3. Starting Unified FastAPI Server (Port 8001)...
+start "SelfStudy Unified Server" cmd /k "cd backend && call .venv\Scripts\activate.bat && uvicorn main:app --host 0.0.0.0 --port 8001"
 
 if not "%CLOUDFLARE_TUNNEL_TOKEN%"=="" (
     echo 4. Starting Cloudflare Tunnel...
     start "Cloudflare Tunnel" cmd /k "cloudflared tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
 ) else (
-    echo Cloudflare Tunnel token not found in .env. Please run it manually or configure it.
+    echo Cloudflare Tunnel token not found in .env. Running in local mode.
 )
 
-echo All production services started!
+echo.
+echo [OK] All production services started!
+echo - Unified Server: http://localhost:8001
+echo - Custom Domain (Cloudflare Tunnel): https://selfstudy.chicvill.store
+echo.
 pause
