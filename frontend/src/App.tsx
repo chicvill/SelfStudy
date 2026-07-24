@@ -184,7 +184,10 @@ function App() {
         <h3 style={{ margin: '0 0 20px 0', color: '#1976d2' }}>메뉴</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
           {loggedInUserId === '010-1111-2222' ? (
-            <button onClick={() => handleMenuClick('admin', true)} style={sidebarButtonStyle(currentTab === 'admin')}>🏫 관리 대시보드</button>
+            <>
+              <button onClick={() => handleMenuClick('admin', true)} style={sidebarButtonStyle(currentTab === 'admin')}>🏫 관리 대시보드</button>
+              <button onClick={() => handleMenuClick('parent', true)} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관 대시보드</button>
+            </>
           ) : (
             <>
               <button onClick={() => handleMenuClick('student', true)} style={sidebarButtonStyle(currentTab === 'student')}>📈 나의 대시보드</button>
@@ -210,7 +213,9 @@ function App() {
           
           <button onClick={() => handleMenuClick('profile_edit', true)} style={sidebarButtonStyle(currentTab === 'profile_edit')}>👤 개인 정보 수정</button>
           <button onClick={() => handleMenuClick('browser', true)} style={sidebarButtonStyle(currentTab === 'browser')}>📖 지식창고 탐색</button>
-          <button onClick={() => { setIsSidebarOpen(false); setShowParentModal(true); }} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관 코드 & 안내</button>
+          {loggedInUserId !== '010-1111-2222' && (
+            <button onClick={() => { setIsSidebarOpen(false); setShowParentModal(true); }} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관 코드 & QR</button>
+          )}
         </div>
 
         {/* 로그아웃 버튼 */}

@@ -5,9 +5,10 @@ import { API_URL } from './config';
 
 interface AdminDashboardProps {
   onLogout?: () => void;
+  onOpenParentView?: (userId: string) => void;
 }
 
-export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
+export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDashboardProps = {}) {
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
@@ -539,13 +540,34 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps = {}) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             
             {/* 상단 간략 정보 및 이용권 설정 */}
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', background: '#f5f5f5', padding: '20px', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', background: '#f5f5f5', padding: '20px', borderRadius: '12px', alignItems: 'center' }}>
               <div style={{ flex: 1, minWidth: '250px' }}>
                 <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>선택된 이용자 정보</div>
                 <strong style={{ fontSize: '18px', color: '#333' }}>{students.find(s => s.user_id === selectedStudent)?.name || '이름 없음'} ({selectedStudent})</strong>
                 <span style={{ marginLeft: '10px', fontSize: '12px', background: isManaged ? '#ffe0b2' : '#e0e0e0', color: isManaged ? '#e65100' : '#666', padding: '3px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
                   {isManaged ? '관리형 수험생' : '자율형 수험생'}
                 </span>
+                <div style={{ marginTop: '10px' }}>
+                  <button
+                    onClick={() => onOpenParentView ? onOpenParentView(selectedStudent) : window.open(`/?parent_code=P-${selectedStudent}`, '_blank')}
+                    style={{
+                      background: '#ff9800',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '13px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(255,152,0,0.3)'
+                    }}
+                  >
+                    👥 상담 중인 학생의 학부모 참관 화면 확인 ➡️
+                  </button>
+                </div>
               </div>
               <div style={{ flex: 1, minWidth: '250px' }}>
                 <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>정기 이용권 만료일 설정</div>
