@@ -469,111 +469,7 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
         </div>
       </div>
 
-      {/* 중단: 출석 및 관리 현황 */}
-      <div style={{ background: '#fff', padding: '20px 30px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-        <h3 style={{ color: '#1976d2', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          📅 나의 등하원 및 관리 현황
-          <span style={{ fontSize: '12px', fontWeight: 'normal', padding: '3px 8px', borderRadius: '10px', background: managementType === '관리형' ? '#ffe0b2' : '#e0e0e0', color: managementType === '관리형' ? '#e65100' : '#666' }}>
-            {managementType === '관리형' ? '관리형 이용자' : '자율형 이용자'}
-          </span>
-        </h3>
-
-        {/* 오늘 등하원 체크 및 상태 표시 */}
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', background: '#f8f9fa', padding: '15px 20px', borderRadius: '8px', border: '1px solid #e0e0e0', marginBottom: '15px' }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>오늘의 등원 정보: </span>
-            <strong style={{ color: '#4caf50' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_in_time ? attendance[0].check_in_time : '미등록'}</strong>
-            <span style={{ margin: '0 15px', color: '#ddd' }}>|</span>
-            <span style={{ fontSize: '13px', color: '#666' }}>오늘의 하원 정보: </span>
-            <strong style={{ color: '#f44336' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_out_time ? attendance[0].check_out_time : '미등록'}</strong>
-          </div>
-
-          {managementType === '관리형' ? (
-            <div style={{ fontSize: '13px', color: '#e65100', fontWeight: 'bold' }}>
-              {attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_checked ? (
-                <span>✅ 관리자 5분 메타인지 상담 완료</span>
-              ) : (
-                <span>⏳ 관리자 등하원 및 상담 대기 중</span>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                onClick={() => handleSelfCheck('in')}
-                disabled={attendance[0]?.date === new Date().toISOString().split('T')[0] && !!attendance[0]?.check_in_time}
-                style={{ background: '#4caf50', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
-              >
-                🎒 등원 체크
-              </button>
-              <button 
-                onClick={() => handleSelfCheck('out')}
-                disabled={attendance[0]?.date === new Date().toISOString().split('T')[0] && !!attendance[0]?.check_out_time}
-                style={{ background: '#f44336', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
-              >
-                🚪 하원 체크
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 특이사항(상담 일지) 표시 */}
-        {managementType === '관리형' && attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_note && (
-          <div style={{ background: '#fff8e1', border: '1px solid #ffe082', padding: '12px 15px', borderRadius: '8px', fontSize: '13px', color: '#b78103', marginBottom: '15px' }}>
-            <strong>오늘의 메타인지 상담 피드백:</strong> {attendance[0].consult_note}
-          </div>
-        )}
-
-        {/* 최근 출석 이력 리스트 */}
-        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-            <thead style={{ background: '#f5f5f5', position: 'sticky', top: 0 }}>
-              <tr>
-                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>날짜</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>등원 시간</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>하원 시간</th>
-                {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>5분 상담</th>}
-                {managementType === '관리형' && <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>피드백</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {attendance.map(h => {
-                const isTardy = checkIsTardy(h.date, h.check_in_time, h.scheduled_in_time);
-                return (
-                  <tr key={h.id} style={{ borderBottom: '1px solid #eee', background: isTardy ? '#fffde7' : '#fff' }}>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold' }}>{h.date}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                      <span style={{ color: '#4caf50', fontWeight: 'bold' }}>{h.check_in_time || '-'}</span>
-                      {h.scheduled_in_time && <span style={{ fontSize: '11px', color: '#888', marginLeft: '5px' }}>({h.scheduled_in_time})</span>}
-                      {isTardy && (
-                        <span style={{ marginLeft: '6px', background: '#d32f2f', color: '#fff', fontSize: '10px', padding: '2px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
-                          지각 경고
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#f44336' }}>
-                      <span>{h.check_out_time || '-'}</span>
-                      {h.scheduled_out_time && <span style={{ fontSize: '11px', color: '#888', marginLeft: '5px' }}>({h.scheduled_out_time})</span>}
-                    </td>
-                    {managementType === '관리형' && (
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', color: h.consult_checked ? 'green' : 'red' }}>
-                        {h.consult_checked ? '완료' : '미완료'}
-                      </td>
-                    )}
-                    {managementType === '관리형' && <td style={{ padding: '8px 12px', color: '#666' }}>{h.consult_note || '-'}</td>}
-                  </tr>
-                );
-              })}
-              {attendance.length === 0 && (
-                <tr>
-                  <td colSpan={managementType === '관리형' ? 5 : 3} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>출석 및 상담 내역이 없습니다.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 하단: AI 챗봇 창 & 3자 실시간 메시지 연동 */}
+      {/* 중단: AI 챗봇 창 & 3자 실시간 메시지 연동 */}
       <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: '400px', flexWrap: 'wrap' }}>
         
         {/* Left: AI 챗봇 창 */}
@@ -643,59 +539,192 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
         </div>
 
         {/* Right: 3자 실시간 메시지 창 */}
-        <div style={{ flex: 1, minWidth: '350px', background: '#f1f8e9', border: '1px solid #c5e1a5', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: '#33691e', padding: '15px 20px', borderRadius: '12px 12px 0 0', color: '#fff', fontWeight: 'bold' }}>
-            <span>💬 3자 실시간 메시지 창 (관리자/학부모 특이사항 소통)</span>
-          </div>
-          
-          <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9fbe7' }}>
-            {messagesList.map(m => {
-              const isSelf = m.sender_role === 'student';
-              let roleLabel = '이용자(학생)';
-              if (m.sender_role === 'admin') roleLabel = '관리자';
-              if (m.sender_role === 'parent') roleLabel = '학부모';
-
-              return (
-                <div key={m.id} style={{ display: 'flex', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}>
-                  <div style={{
-                    maxWidth: '85%', padding: '10px 14px', borderRadius: '12px',
-                    background: isSelf ? '#33691e' : '#fff',
-                    color: isSelf ? '#fff' : '#333',
-                    border: '1px solid #dcdde1',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                    fontSize: '13px'
-                  }}>
-                    <div style={{ fontSize: '10px', color: isSelf ? '#c5e1a5' : '#888', marginBottom: '4px', fontWeight: 'bold' }}>
-                      {roleLabel}
-                    </div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                  </div>
-                </div>
-              );
-            })}
-            {messagesList.length === 0 && (
-              <div style={{ color: '#999', textAlign: 'center', marginTop: '100px', fontSize: '13px' }}>대화 내역이 없습니다.</div>
+        <div style={{
+          flex: 1,
+          minWidth: '350px',
+          background: managementType === '관리형' ? '#f1f8e9' : '#f9f9f9',
+          border: `1px solid ${managementType === '관리형' ? '#c5e1a5' : '#e0e0e0'}`,
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{ background: managementType === '관리형' ? '#33691e' : '#616161', padding: '15px 20px', borderRadius: '12px 12px 0 0', color: '#fff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>💬 3자 실시간 메시지 창 (관리자/학부모 소통)</span>
+            {managementType !== '관리형' && (
+              <span style={{ fontSize: '11px', background: '#e0e0e0', color: '#424242', padding: '3px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                🔒 관리형 전용 혜택
+              </span>
             )}
           </div>
 
-          <div style={{ padding: '10px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', gap: '10px' }}>
-            <input
-              type="text"
-              value={newMsg}
-              onChange={e => setNewMsg(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-              placeholder="관리자/학부모와 공유할 내용을 입력하세요..."
-              style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' }}
-            />
-            <button
-              onClick={handleSendMessage}
-              style={{ background: '#33691e', color: '#fff', border: 'none', padding: '0 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
-            >
-              전송
-            </button>
-          </div>
-        </div>
+          {managementType === '관리형' ? (
+            <>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9fbe7' }}>
+                {messagesList.map(m => {
+                  const isSelf = m.sender_role === 'student';
+                  let roleLabel = '이용자(학생)';
+                  if (m.sender_role === 'admin') roleLabel = '관리자';
+                  if (m.sender_role === 'parent') roleLabel = '학부모';
 
+                  return (
+                    <div key={m.id} style={{ display: 'flex', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}>
+                      <div style={{
+                        maxWidth: '85%', padding: '10px 14px', borderRadius: '12px',
+                        background: isSelf ? '#33691e' : '#fff',
+                        color: isSelf ? '#fff' : '#333',
+                        border: '1px solid #dcdde1',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                        fontSize: '13px'
+                      }}>
+                        <div style={{ fontSize: '10px', color: isSelf ? '#c5e1a5' : '#888', marginBottom: '4px', fontWeight: 'bold' }}>
+                          {roleLabel}
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {messagesList.length === 0 && (
+                  <div style={{ color: '#999', textAlign: 'center', marginTop: '100px', fontSize: '13px' }}>대화 내역이 없습니다.</div>
+                )}
+              </div>
+
+              <div style={{ padding: '10px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  value={newMsg}
+                  onChange={e => setNewMsg(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                  placeholder="관리자/학부모와 공유할 내용을 입력하세요..."
+                  style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' }}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  style={{ background: '#33691e', color: '#fff', border: 'none', padding: '0 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+                >
+                  전송
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ flex: 1, padding: '30px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: '#fafafa', borderRadius: '0 0 12px 12px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+              <h4 style={{ margin: '0 0 8px 0', color: '#333', fontSize: '15px' }}>[관리형 전용 혜택] 3자 실시간 소통 메시지</h4>
+              <p style={{ color: '#666', fontSize: '13px', lineHeight: '1.6', maxWidth: '300px', margin: '0 0 15px 0' }}>
+                관리자 및 학부모님이 수험생의 학습 질의응답 및 특이사항을 실시간으로 소통하고 케어하는 전용 메시지 기능입니다.
+              </p>
+              <span style={{ background: '#e3f2fd', color: '#0d47a1', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #bbdefb' }}>
+                💡 관리자 문의를 통해 관리형 서비스 전환 시 혜택이 제공됩니다
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 하단: 출석 및 관리 현황 */}
+      <div style={{ background: '#fff', padding: '20px 30px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+        <h3 style={{ color: managementType === '관리형' ? '#1976d2' : '#616161', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📅 나의 등하원 및 관리 현황
+          {managementType === '관리형' ? (
+            <span style={{ fontSize: '12px', fontWeight: 'normal', padding: '3px 8px', borderRadius: '10px', background: '#ffe0b2', color: '#e65100' }}>
+              관리형 이용자
+            </span>
+          ) : (
+            <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '10px', background: '#eee', color: '#616161', border: '1px solid #ccc' }}>
+              🔒 관리형 전용 혜택
+            </span>
+          )}
+        </h3>
+
+        {managementType === '관리형' ? (
+          <>
+            {/* 오늘 등하원 체크 및 상태 표시 */}
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', background: '#f8f9fa', padding: '15px 20px', borderRadius: '8px', border: '1px solid #e0e0e0', marginBottom: '15px' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <span style={{ fontSize: '13px', color: '#666' }}>오늘의 등원 정보: </span>
+                <strong style={{ color: '#4caf50' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_in_time ? attendance[0].check_in_time : '미등록'}</strong>
+                <span style={{ margin: '0 15px', color: '#ddd' }}>|</span>
+                <span style={{ fontSize: '13px', color: '#666' }}>오늘의 하원 정보: </span>
+                <strong style={{ color: '#f44336' }}>{attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.check_out_time ? attendance[0].check_out_time : '미등록'}</strong>
+              </div>
+
+              <div style={{ fontSize: '13px', color: '#e65100', fontWeight: 'bold' }}>
+                {attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_checked ? (
+                  <span>✅ 관리자 5분 메타인지 상담 완료</span>
+                ) : (
+                  <span>⏳ 관리자 등하원 및 상담 대기 중</span>
+                )}
+              </div>
+            </div>
+
+            {/* 특이사항(상담 일지) 표시 */}
+            {attendance[0]?.date === new Date().toISOString().split('T')[0] && attendance[0]?.consult_note && (
+              <div style={{ background: '#fff8e1', border: '1px solid #ffe082', padding: '12px 15px', borderRadius: '8px', fontSize: '13px', color: '#b78103', marginBottom: '15px' }}>
+                <strong>오늘의 메타인지 상담 피드백:</strong> {attendance[0].consult_note}
+              </div>
+            )}
+
+            {/* 최근 출석 이력 리스트 */}
+            <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead style={{ background: '#f5f5f5', position: 'sticky', top: 0 }}>
+                  <tr>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>날짜</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>등원 시간</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>하원 시간</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>5분 상담</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>피드백</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map(h => {
+                    const isTardy = checkIsTardy(h.date, h.check_in_time, h.scheduled_in_time);
+                    return (
+                      <tr key={h.id} style={{ borderBottom: '1px solid #eee', background: isTardy ? '#fffde7' : '#fff' }}>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold' }}>{h.date}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <span style={{ color: '#4caf50', fontWeight: 'bold' }}>{h.check_in_time || '-'}</span>
+                          {h.scheduled_in_time && <span style={{ fontSize: '11px', color: '#888', marginLeft: '5px' }}>({h.scheduled_in_time})</span>}
+                          {isTardy && (
+                            <span style={{ marginLeft: '6px', background: '#d32f2f', color: '#fff', fontSize: '10px', padding: '2px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
+                              지각 경고
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', color: '#f44336' }}>
+                          <span>{h.check_out_time || '-'}</span>
+                          {h.scheduled_out_time && <span style={{ fontSize: '11px', color: '#888', marginLeft: '5px' }}>({h.scheduled_out_time})</span>}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', color: h.consult_checked ? 'green' : 'red' }}>
+                          {h.consult_checked ? '완료' : '미완료'}
+                        </td>
+                        <td style={{ padding: '8px 12px', color: '#666' }}>{h.consult_note || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                  {attendance.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#999' }}>출석 및 상담 내역이 없습니다.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div style={{ background: '#f9f9f9', border: '1px dashed #cccccc', padding: '22px 20px', borderRadius: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '30px' }}>🔒</div>
+            <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#333' }}>
+              1:1 대면 등하원 밀착 케어 & 5분 메타인지 상담 피드백
+            </div>
+            <div style={{ fontSize: '13px', color: '#666', maxWidth: '480px', lineHeight: '1.5' }}>
+              등하원 시간 실시간 체크, 지각 경고 알림, 관리자 1:1 메타인지 구두 테스트 및 매일 피드백 일지가 제공되는 관리형 전용 서비스입니다.
+            </div>
+            <span style={{ background: '#fff3e0', color: '#e65100', padding: '6px 14px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ffe0b2', marginTop: '4px' }}>
+              🎒 관리자 문의를 통해 관리형 전환 시 혜택이 제공됩니다
+            </span>
+          </div>
+        )}
       </div>
       
     </div>
