@@ -502,39 +502,76 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
             <div ref={chatEndRef} />
           </div>
 
-          <div style={{ padding: '15px', borderTop: '1px solid #eee', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={startRecording}
-              title="마이크로 입력하기"
-              style={{ 
-                background: isRecording ? '#ffebee' : '#f5f5f5', 
-                color: isRecording ? '#d32f2f' : '#555', 
-                border: '1px solid #ccc', 
-                borderRadius: '8px', 
-                width: '45px',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px',
-                transition: 'all 0.2s'
-              }}
-            >
-              {isRecording ? '🛑' : '🎤'}
-            </button>
-            <input
-              type="text"
+          <div style={{ padding: '15px', borderTop: '1px solid #eee', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <textarea
+              rows={2}
               value={inputMsg}
               onChange={e => setInputMsg(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSendEvaluation()}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendEvaluation();
+                }
+              }}
               placeholder={evaluatingTaskInfo ? "학습한 내용을 설명해주세요..." : "무엇이든 자유롭게 질문하거나 [평가받기]를 눌러주세요..."}
               disabled={loadingChat}
-              style={{ flex: 1, padding: '12px 15px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '12px 15px',
+                borderRadius: '8px',
+                border: '1px solid #ccc',
+                outline: 'none',
+                fontSize: '14px',
+                resize: 'none',
+                fontFamily: 'inherit',
+                lineHeight: '1.4'
+              }}
             />
-            <button 
-              onClick={handleSendEvaluation}
-              disabled={!inputMsg.trim() || loadingChat}
-              style={{ background: !inputMsg.trim() ? '#ccc' : '#1976d2', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '8px', cursor: !inputMsg.trim() ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
-            >
-              전송
-            </button>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              <button 
+                onClick={startRecording}
+                title="마이크로 입력하기"
+                style={{ 
+                  background: isRecording ? '#ffebee' : '#f5f5f5', 
+                  color: isRecording ? '#d32f2f' : '#333', 
+                  border: '1px solid #ccc', 
+                  borderRadius: '8px', 
+                  padding: '8px 14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span>{isRecording ? '🛑' : '🎤'}</span>
+                <span>{isRecording ? '녹음 중지' : '음성 입력'}</span>
+              </button>
+
+              <button 
+                onClick={handleSendEvaluation}
+                disabled={!inputMsg.trim() || loadingChat}
+                style={{ 
+                  background: !inputMsg.trim() ? '#ccc' : '#1976d2', 
+                  color: '#fff', 
+                  border: 'none', 
+                  padding: '8px 24px', 
+                  borderRadius: '8px', 
+                  cursor: !inputMsg.trim() ? 'not-allowed' : 'pointer', 
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>🚀 전송</span>
+              </button>
+            </div>
           </div>
         </div>
 
