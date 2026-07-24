@@ -366,22 +366,9 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
 
       {/* 상단: 일일 진도 계획표 */}
       <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #eee', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <h2 style={{ color: '#1976d2', margin: '0 0 8px 0', fontSize: '20px' }}>🏃 나의 진도 계획표</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>[{payload.plan_title || '진도 계획'}]</p>
-              <span style={{ fontSize: '12px', color: '#888', background: '#f5f5f5', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                부모님 참관 코드: <strong>{payload.observer_code || ''}</strong>
-              </span>
-            </div>
-          </div>
-          <button 
-            onClick={handleAutoReschedule}
-            style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}
-          >
-            🚨 전체 일정 재조정 (AI)
-          </button>
+        <div style={{ borderBottom: '2px solid #eee', paddingBottom: '15px', marginBottom: '15px' }}>
+          <h2 style={{ color: '#1976d2', margin: '0 0 4px 0', fontSize: '20px' }}>🏃 나의 진도 계획표</h2>
+          <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>[{payload.plan_title || '진도 계획'}]</p>
         </div>
 
         {/* 과목 탭 */}

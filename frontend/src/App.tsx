@@ -23,6 +23,7 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [wizardFormData, setWizardFormData] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showParentModal, setShowParentModal] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -187,6 +188,7 @@ function App() {
           ) : (
             <>
               <button onClick={() => handleMenuClick('student', true)} style={sidebarButtonStyle(currentTab === 'student')}>📈 나의 대시보드</button>
+              <button onClick={() => { setIsSidebarOpen(false); handleReschedule(); }} style={{ ...sidebarButtonStyle(false), color: '#d32f2f', fontWeight: 'bold' }}>🚨 전체 일정 재조정 (AI)</button>
               <button onClick={() => handleMenuClick('onboarding', false)} style={sidebarButtonStyle(currentTab === 'onboarding' && !isOnboarded)}>📝 목표 및 개인정보 설정</button>
               
               <div style={{ padding: '10px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -208,7 +210,7 @@ function App() {
           
           <button onClick={() => handleMenuClick('profile_edit', true)} style={sidebarButtonStyle(currentTab === 'profile_edit')}>👤 개인 정보 수정</button>
           <button onClick={() => handleMenuClick('browser', true)} style={sidebarButtonStyle(currentTab === 'browser')}>📖 지식창고 탐색</button>
-          <button onClick={() => handleMenuClick('parent', true)} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관</button>
+          <button onClick={() => { setIsSidebarOpen(false); setShowParentModal(true); }} style={sidebarButtonStyle(currentTab === 'parent')}>👥 학부모 참관 코드 & 안내</button>
         </div>
 
         {/* 로그아웃 버튼 */}
@@ -220,13 +222,13 @@ function App() {
               background: '#fff0f0',
               color: '#d32f2f',
               border: '1px solid #ffcdd2',
-              padding: '12px 15px',
+              padding: '12px',
               borderRadius: '8px',
               cursor: 'pointer',
               fontWeight: 'bold',
-              textAlign: 'left',
-              fontSize: '15px',
+              fontSize: '14px',
               display: 'flex',
+              justifyContent: 'center',
               alignItems: 'center',
               gap: '8px'
             }}
@@ -277,6 +279,71 @@ function App() {
           />
         )}
       </main>
+
+      {/* 학부모 참관 코드 및 사용 방법 모달 팝업 */}
+      {showParentModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', zIndex: 2000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '16px', padding: '25px',
+            maxWidth: '480px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            position: 'relative', display: 'flex', flexDirection: 'column'
+          }}>
+            <button 
+              onClick={() => setShowParentModal(false)}
+              style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#888' }}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ color: '#1976d2', margin: '0 0 15px 0', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              👥 학부모 참관 코드 및 이용 안내
+            </h3>
+
+            <div style={{ background: '#e3f2fd', border: '1px solid #bbdefb', padding: '16px', borderRadius: '10px', textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '12px', color: '#1565c0', marginBottom: '6px', fontWeight: '500' }}>수험생 전용 학부모 참관 접속 코드</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0d47a1', letterSpacing: '1px' }}>
+                {`P-${loggedInUserId}`}
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#444', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '25px' }}>
+              <div style={{ fontWeight: 'bold', color: '#1976d2', fontSize: '14px' }}>📖 학부모 참관 사용 방법</div>
+              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
+                <strong style={{ color: '#333' }}>1. 접속 주소:</strong> 학부모님의 스마트폰 또는 PC 브라우저 주소창에 <span style={{ color: '#1976d2', fontWeight: 'bold' }}>https://selfstudy.chicvill.store</span> 를 입력합니다.
+              </div>
+              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
+                <strong style={{ color: '#333' }}>2. 로그인:</strong> 로그인 화면의 <strong>[학부모 참관 로그인]</strong>을 선택한 후 위의 참관 코드(<strong style={{ color: '#0d47a1' }}>P-{loggedInUserId}</strong>)를 입력하고 로그인합니다.
+              </div>
+              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
+                <strong style={{ color: '#333' }}>3. 실시간 학습 모니터링:</strong> 학부모님은 자녀의 일일 진도 성취율, 출석 기록, 메타인지 5분 상담 피드백 및 AI 학습 평가 내역을 자녀의 학습을 방해하지 않고 실시간으로 참관하실 수 있습니다.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setShowParentModal(false);
+                  setCurrentTab('parent');
+                  setIsOnboarded(true);
+                }}
+                style={{ flex: 1, background: '#1976d2', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+              >
+                👀 학부모 참관 화면 직접 보기
+              </button>
+              <button
+                onClick={() => setShowParentModal(false)}
+                style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
