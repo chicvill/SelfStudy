@@ -718,14 +718,33 @@ async def get_chat(session_id: str):
 
 @app.get("/knowledge/observe/{observer_code}")
 async def get_observed_schedule(observer_code: str):
-    """학부모 참관용: 발급된 코드로 읽기 전용 스케줄 불러오기"""
-    search_tag = f"obs_{observer_code}"
+    """학부모 참관용: 발급된 코드 또는 전화번호(P-010-XXXX-YYYY)로 읽기 전용 스케줄 불러오기"""
+    clean_code = observer_code.strip()
+    if clean_code.startswith("P-") or clean_code.startswith("p-"):
+        clean_code = clean_code[2:]
+        
+    # 1) Try searching by obs_{code}
+    search_tag = f"obs_{clean_code}"
     results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=1)
     
+    # 2) If not found, try searching by sess_{clean_code} (student phone number)
+    if not results:
+        sess_tag = f"sess_{clean_code}"
+        results = context.knowledge_repo.search_knowledge_by_tags([sess_tag], limit=10)
+        
     if not results:
         raise HTTPException(status_code=404, detail="유효하지 않은 참관 코드입니다.")
         
-    data = results[0]
+    active_schedule = None
+    for r in results:
+        if r["payload"].get("status") != "superseded":
+            active_schedule = r
+            break
+            
+    if not active_schedule:
+        active_schedule = results[0]
+        
+    data = active_schedule.copy()
     data["is_read_only"] = True 
     return {"status": "success", "data": data}
 

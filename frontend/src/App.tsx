@@ -280,70 +280,121 @@ function App() {
         )}
       </main>
 
-      {/* 학부모 참관 코드 및 사용 방법 모달 팝업 */}
-      {showParentModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.6)', zIndex: 2000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-        }}>
+      {/* 학부모 참관 QR코드 및 참관 안내 모달 팝업 */}
+      {showParentModal && (() => {
+        const parentAccessUrl = `https://selfstudy.chicvill.store/?parent_code=P-${loggedInUserId}`;
+        const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(parentAccessUrl)}`;
+
+        const handleCopyLink = () => {
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(parentAccessUrl);
+            alert("✅ 학부모 참관 접속 링크가 복사되었습니다!\n카카오톡이나 문자 메시지로 학부모님께 공유해 주세요.");
+          } else {
+            prompt("아래 링크를 복사하여 전달해 주세요:", parentAccessUrl);
+          }
+        };
+
+        return (
           <div style={{
-            background: '#fff', borderRadius: '16px', padding: '25px',
-            maxWidth: '480px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-            position: 'relative', display: 'flex', flexDirection: 'column'
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.65)', zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
           }}>
-            <button 
-              onClick={() => setShowParentModal(false)}
-              style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#888' }}
-            >
-              ✕
-            </button>
-
-            <h3 style={{ color: '#1976d2', margin: '0 0 15px 0', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              👥 학부모 참관 코드 및 이용 안내
-            </h3>
-
-            <div style={{ background: '#e3f2fd', border: '1px solid #bbdefb', padding: '16px', borderRadius: '10px', textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ fontSize: '12px', color: '#1565c0', marginBottom: '6px', fontWeight: '500' }}>수험생 전용 학부모 참관 접속 코드</div>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0d47a1', letterSpacing: '1px' }}>
-                {`P-${loggedInUserId}`}
-              </div>
-            </div>
-
-            <div style={{ fontSize: '13px', color: '#444', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '25px' }}>
-              <div style={{ fontWeight: 'bold', color: '#1976d2', fontSize: '14px' }}>📖 학부모 참관 사용 방법</div>
-              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
-                <strong style={{ color: '#333' }}>1. 접속 주소:</strong> 학부모님의 스마트폰 또는 PC 브라우저 주소창에 <span style={{ color: '#1976d2', fontWeight: 'bold' }}>https://selfstudy.chicvill.store</span> 를 입력합니다.
-              </div>
-              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
-                <strong style={{ color: '#333' }}>2. 로그인:</strong> 로그인 화면의 <strong>[학부모 참관 로그인]</strong>을 선택한 후 위의 참관 코드(<strong style={{ color: '#0d47a1' }}>P-{loggedInUserId}</strong>)를 입력하고 로그인합니다.
-              </div>
-              <div style={{ background: '#f8f9fa', padding: '12px 15px', borderRadius: '8px', border: '1px solid #eee' }}>
-                <strong style={{ color: '#333' }}>3. 실시간 학습 모니터링:</strong> 학부모님은 자녀의 일일 진도 성취율, 출석 기록, 메타인지 5분 상담 피드백 및 AI 학습 평가 내역을 자녀의 학습을 방해하지 않고 실시간으로 참관하실 수 있습니다.
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={() => {
-                  setShowParentModal(false);
-                  setCurrentTab('parent');
-                  setIsOnboarded(true);
-                }}
-                style={{ flex: 1, background: '#1976d2', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
-              >
-                👀 학부모 참관 화면 직접 보기
-              </button>
-              <button
+            <div style={{
+              background: '#fff', borderRadius: '20px', padding: '25px 28px',
+              maxWidth: '460px', width: '100%', boxShadow: '0 15px 35px rgba(0,0,0,0.25)',
+              position: 'relative', display: 'flex', flexDirection: 'column',
+              maxHeight: '90vh', overflowY: 'auto'
+            }}>
+              <button 
                 onClick={() => setShowParentModal(false)}
-                style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+                style={{ position: 'absolute', top: '18px', right: '18px', background: '#f5f5f5', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px', cursor: 'pointer', color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                닫기
+                ✕
               </button>
+
+              <h3 style={{ color: '#1976d2', margin: '0 0 16px 0', fontSize: '19px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                📷 학부모 참관 QR코드 & 안내
+              </h3>
+
+              {/* QR코드 중앙 카드 */}
+              <div style={{
+                background: 'linear-gradient(135deg, #f0f7ff 0%, #e3f2fd 100%)',
+                border: '1px solid #bbdefb',
+                borderRadius: '16px',
+                padding: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '20px',
+                boxShadow: '0 4px 12px rgba(25,118,210,0.08)'
+              }}>
+                <img 
+                  src={qrCodeImageUrl} 
+                  alt="학부모 참관 QR코드" 
+                  style={{ width: '180px', height: '180px', borderRadius: '12px', background: '#fff', padding: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }} 
+                />
+                <div style={{ marginTop: '12px', fontSize: '13px', fontWeight: 'bold', color: '#0d47a1', textAlign: 'center' }}>
+                  📱 학부모님 스마트폰 카메라로 QR 코드를 스캔하세요!
+                </div>
+              </div>
+
+              {/* 참관 코드 및 링크 복사 박스 */}
+              <div style={{ background: '#fff8e1', border: '1px solid #ffe082', padding: '14px 16px', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#e65100', fontWeight: 'bold' }}>참관 코드 (직접 입력용)</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#b71c1c', letterSpacing: '1px' }}>
+                    {`P-${loggedInUserId}`}
+                  </div>
+                </div>
+                <button
+                  onClick={handleCopyLink}
+                  style={{ background: '#ff9800', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  📋 링크/코드 복사
+                </button>
+              </div>
+
+              {/* 사용 방법 안내 */}
+              <div style={{ fontSize: '13px', color: '#444', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
+                <div style={{ fontWeight: 'bold', color: '#1976d2', fontSize: '14px' }}>📖 학부모 참관 사용 방법</div>
+                
+                <div style={{ background: '#f8f9fa', padding: '12px 14px', borderRadius: '10px', border: '1px solid #eee' }}>
+                  <strong style={{ color: '#0d47a1' }}>1. QR 스캔만으로 즉시 접속:</strong> 학부모님이 스마트폰 카메라로 위 QR 코드를 스캔하면 별도 로그인 없이 바로 학부모 참관 화면이 열립니다.
+                </div>
+                
+                <div style={{ background: '#fff3e0', padding: '12px 14px', borderRadius: '10px', border: '1px solid #ffe0b2' }}>
+                  <strong style={{ color: '#e65100' }}>⭐ 2. 즐겨찾기 / 홈 화면 추가:</strong> 참관 창이 열리면 스마트폰 브라우저 메뉴에서 <strong>[즐겨찾기]</strong> 또는 <strong>[홈 화면에 추가]</strong>해 놓으시면, 언제든지 재접속하여 실시간 현황을 확인하실 수 있습니다.
+                </div>
+                
+                <div style={{ background: '#f8f9fa', padding: '12px 14px', borderRadius: '10px', border: '1px solid #eee' }}>
+                  <strong style={{ color: '#555' }}>3. 참관 코드 직접 입력:</strong> PC에서 접속 시 <span style={{ color: '#1976d2', fontWeight: 'bold' }}>https://selfstudy.chicvill.store</span> 접속 후 참관 코드(<strong style={{ color: '#0d47a1' }}>P-{loggedInUserId}</strong>)를 입력하여 접속 가능합니다.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setShowParentModal(false);
+                    setCurrentTab('parent');
+                    setIsOnboarded(true);
+                  }}
+                  style={{ flex: 1, background: '#1976d2', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+                >
+                  👀 참관 화면 직접 테스트
+                </button>
+                <button
+                  onClick={() => setShowParentModal(false)}
+                  style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 18px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

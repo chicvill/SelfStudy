@@ -17,22 +17,19 @@ export default function ParentDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMsg, setNewMsg] = useState('');
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!observerCode.trim()) return;
-    
+  const doFetchObserverCode = async (code: string) => {
+    if (!code.trim()) return;
+    setObserverCode(code);
     setLoading(true);
     setErrorMsg("");
     setScheduleData(null);
     setMessages([]);
-    
     try {
-      const resp = await axios.get(`${API_URL}/knowledge/observe/${observerCode}`);
+      const resp = await axios.get(`${API_URL}/knowledge/observe/${code}`);
       setScheduleData(resp.data.data);
       if (resp.data.data.payload?.spreadsheet_data?.subjects?.length > 0) {
         setSelectedSubject(resp.data.data.payload.spreadsheet_data.subjects[0].subject_name);
       }
-      
       const sessId = resp.data.data.payload?.session_id;
       if (sessId) {
         await fetchChildData(sessId);
@@ -41,6 +38,19 @@ export default function ParentDashboard() {
       setErrorMsg(err.response?.data?.detail || "코드를 찾을 수 없습니다.");
     }
     setLoading(false);
+  };
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeParam = urlParams.get('parent_code') || urlParams.get('observer_code') || urlParams.get('code');
+    if (codeParam) {
+      doFetchObserverCode(codeParam.trim());
+    }
+  }, []);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    doFetchObserverCode(observerCode);
   };
 
   const fetchChildData = async (sessId: string) => {
@@ -130,6 +140,28 @@ export default function ParentDashboard() {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '40px auto', padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+      {/* 즐겨찾기 / 홈 화면 추가 안내 배너 */}
+      <div style={{
+        background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+        color: '#e65100',
+        border: '1px solid #ffcc80',
+        padding: '14px 20px',
+        borderRadius: '10px',
+        marginBottom: '20px',
+        fontSize: '13px',
+        lineHeight: '1.5',
+        boxShadow: '0 2px 8px rgba(230,81,0,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <div style={{ fontSize: '24px', flexShrink: 0 }}>⭐</div>
+        <div>
+          <strong style={{ fontSize: '14px' }}>[학부모님 필수 팁] 이 페이지를 즐겨찾기 또는 홈 화면에 추가하세요!</strong><br/>
+          스마트폰 브라우저 메뉴에서 <strong>[즐겨찾기]</strong> 또는 <strong>[홈 화면에 추가]</strong>해 두시면, 매번 로그인이나 코드 입력 없이 언제든지 자녀의 실시간 학습 현황과 출석 일지를 바로 확인하실 수 있습니다.
+        </div>
+      </div>
+
       <h2 style={{ color: '#ff9800', textAlign: 'center', marginBottom: '10px' }}>👥 학부모 참관 대시보드</h2>
       <p style={{ color: '#666', textAlign: 'center', marginBottom: '30px' }}>자녀가 공유해준 6자리 참관 코드를 입력하세요.</p>
       
