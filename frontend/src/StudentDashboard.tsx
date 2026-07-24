@@ -365,27 +365,27 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
       )}
 
       {/* 상단: 일일 진도 계획표 */}
-      <div style={{ background: '#fff', padding: '20px 30px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #eee', paddingBottom: '20px', marginBottom: '20px' }}>
+      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #eee', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
           <div>
-            <h2 style={{ color: '#1976d2', margin: '0 0 10px 0' }}>🏃 나의 진도 계획표</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <p style={{ margin: 0, color: '#666' }}>[{payload.plan_title || '진도 계획'}]</p>
-              <span style={{ fontSize: '13px', color: '#888', background: '#f5f5f5', padding: '4px 10px', borderRadius: '12px' }}>
+            <h2 style={{ color: '#1976d2', margin: '0 0 8px 0', fontSize: '20px' }}>🏃 나의 진도 계획표</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>[{payload.plan_title || '진도 계획'}]</p>
+              <span style={{ fontSize: '12px', color: '#888', background: '#f5f5f5', padding: '3px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
                 부모님 참관 코드: <strong>{payload.observer_code || ''}</strong>
               </span>
             </div>
           </div>
           <button 
             onClick={handleAutoReschedule}
-            style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}
           >
             🚨 전체 일정 재조정 (AI)
           </button>
         </div>
 
         {/* 과목 탭 */}
-        <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '5px' }}>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '15px', overflowX: 'auto', paddingBottom: '6px', WebkitOverflowScrolling: 'touch' }}>
           {(payload.spreadsheet_data?.subjects || []).map((subj: any) => (
             <button
               key={subj.subject_name}
@@ -395,7 +395,7 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
                 color: selectedSubject === subj.subject_name ? '#fff' : '#555',
                 border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer',
                 fontWeight: selectedSubject === subj.subject_name ? 'bold' : 'normal',
-                whiteSpace: 'nowrap', fontSize: '15px'
+                whiteSpace: 'nowrap', fontSize: '14px', flexShrink: 0
               }}
             >
               {subj.subject_name}
@@ -404,11 +404,11 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
         </div>
 
         {/* 진도 프로그레스 바 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px', background: '#f8f9fa', padding: '10px 15px', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', minWidth: '85px', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', background: '#f8f9fa', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e0e0e0', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>
             진도율 {progressPercent}%
           </span>
-          <div style={{ flex: 1, height: '8px', background: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ flex: 1, minWidth: '120px', height: '8px', background: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
             <div style={{ width: `${progressPercent}%`, height: '100%', background: '#4caf50', borderRadius: '4px', transition: 'width 0.4s ease' }} />
           </div>
           <span style={{ fontSize: '12px', color: '#666', whiteSpace: 'nowrap' }}>
@@ -416,15 +416,21 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
           </span>
         </div>
 
+        {/* 스크롤 가이드 힌트 */}
+        <div style={{ fontSize: '11px', color: '#1976d2', background: '#e3f2fd', padding: '4px 10px', borderRadius: '4px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>👈 좌우로 스크롤하시면 전체 정보를 보실 수 있습니다 👉</span>
+          <span style={{ fontSize: '10px', color: '#666' }}>(두 손가락으로 화면 확대 가능)</span>
+        </div>
+
         {/* 스크롤 가능한 일자별 리스트 */}
-        <div ref={listContainerRef} style={{ height: '200px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+        <div ref={listContainerRef} style={{ height: '240px', overflow: 'auto', border: '1px solid #eee', borderRadius: '8px', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f5f5f5', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 1 }}>
               <tr>
-                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>일자 (요일)</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>배정시간</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>단원명</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5' }}>상태 / 성취율</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5', width: '125px', whiteSpace: 'nowrap' }}>일자 (요일)</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5', width: '80px', whiteSpace: 'nowrap' }}>배정시간</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #ddd', background: '#f5f5f5', minWidth: '220px' }}>단원명</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', borderBottom: '2px solid #ddd', background: '#f5f5f5', width: '130px', whiteSpace: 'nowrap' }}>상태 / 성취율</th>
               </tr>
             </thead>
             <tbody>
@@ -434,17 +440,17 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
                 const rate = achievementRates[achievementKey] || (isChecked ? 100 : null);
                 
                 return (
-                  <tr key={idx} data-date={task.date} style={{ borderBottom: '1px solid #eee', background: isChecked ? '#fdfdfd' : '#fff', height: '42px' }}>
-                    <td style={{ padding: '8px 12px', color: '#555', fontWeight: 'bold' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#666' }}>{task.estimated_minutes}분</td>
-                    <td style={{ padding: '8px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none' }}>{task.unit_name}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  <tr key={idx} data-date={task.date} style={{ borderBottom: '1px solid #eee', background: isChecked ? '#fdfdfd' : '#fff' }}>
+                    <td style={{ padding: '10px 12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#666', whiteSpace: 'nowrap' }}>{task.estimated_minutes}분</td>
+                    <td style={{ padding: '10px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none', wordBreak: 'keep-all', lineHeight: '1.4' }}>{task.unit_name}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {isChecked ? (
-                        <span style={{ color: '#4caf50', fontWeight: 'bold' }}>성취율: {rate}%</span>
+                        <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '13px' }}>성취율: {rate}%</span>
                       ) : (
                         <button 
                           onClick={() => startEvaluation(task.week_number, task.task_index, task)}
-                          style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
+                          style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}
                         >
                           🎙️ 평가받기
                         </button>

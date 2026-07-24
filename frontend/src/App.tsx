@@ -133,24 +133,26 @@ function App() {
       flexDirection: 'column',
       background: 'linear-gradient(135deg, #0b1a6c 0%, #35158a 50%, #6830c2 100%)'
     }}>
-      <header style={{ padding: '20px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+      <header style={{ padding: '12px 15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '240px' }}>
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '30px', cursor: 'pointer', padding: 0 }}
+            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '28px', cursor: 'pointer', padding: 0, lineHeight: 1 }}
           >
             ☰
           </button>
-          <h1 style={{ margin: 0, color: '#fff', fontSize: '24px', fontWeight: '800' }}>
-            MQstudy <span style={{ color: '#82d7ff' }}>자기주도학습 플랫폼</span>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h1 style={{ margin: 0, color: '#fff', fontSize: 'clamp(16px, 4vw, 22px)', fontWeight: '800', lineHeight: 1.2 }}>
+              MQstudy <span style={{ color: '#82d7ff' }}>자기주도학습</span>
+            </h1>
             {userName && (
-              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '10px', color: '#e0e0e0' }}>
+              <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#e0e0e0', marginTop: '2px' }}>
                 ({userName} {loggedInUserId === '010-1111-2222' ? '관리자' : '수험생'}님)
               </span>
             )}
-          </h1>
+          </div>
         </div>
-        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+        <div style={{ fontSize: '12px', fontWeight: '600', background: 'rgba(255,255,255,0.15)', padding: '4px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
           {currentTime.getFullYear()}-
           {String(currentTime.getMonth() + 1).padStart(2, '0')}-
           {String(currentTime.getDate()).padStart(2, '0')} {' '}
