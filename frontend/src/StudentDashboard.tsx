@@ -588,11 +588,6 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
         }}>
           <div style={{ background: managementType === '관리형' ? '#33691e' : '#616161', padding: '15px 20px', borderRadius: '12px 12px 0 0', color: '#fff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>💬 3자 실시간 메시지 창 (관리자/학부모 소통)</span>
-            {managementType !== '관리형' && (
-              <span style={{ fontSize: '11px', background: '#e0e0e0', color: '#424242', padding: '3px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                🔒 관리형 전용 혜택
-              </span>
-            )}
           </div>
 
           {managementType === '관리형' ? (
@@ -663,13 +658,9 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
       <div style={{ background: '#fff', padding: '20px 30px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', flexShrink: 0 }}>
         <h3 style={{ color: managementType === '관리형' ? '#1976d2' : '#616161', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
           📅 나의 등하원 및 관리 현황
-          {managementType === '관리형' ? (
+          {managementType === '관리형' && (
             <span style={{ fontSize: '12px', fontWeight: 'normal', padding: '3px 8px', borderRadius: '10px', background: '#ffe0b2', color: '#e65100' }}>
               관리형 이용자
-            </span>
-          ) : (
-            <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '10px', background: '#eee', color: '#616161', border: '1px solid #ccc' }}>
-              🔒 관리형 전용 혜택
             </span>
           )}
         </h3>
