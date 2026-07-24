@@ -470,10 +470,10 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
       </div>
 
       {/* 중단: AI 챗봇 창 & 3자 실시간 메시지 연동 */}
-      <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: '400px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '20px', flexShrink: 0, flexWrap: 'wrap' }}>
         
         {/* Left: AI 챗봇 창 */}
-        <div style={{ flex: 1, minWidth: '350px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', border: '1px solid #bbdefb' }}>
+        <div style={{ flex: '1 1 320px', minWidth: '280px', minHeight: '400px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', border: '1px solid #bbdefb' }}>
           <div style={{ background: '#1976d2', padding: '15px 20px', borderRadius: '12px 12px 0 0', color: '#fff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
             <span>🤖 AI 학습 평가 챗봇</span>
             {evaluatingTaskInfo && <span style={{ fontSize: '13px', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px' }}>평가 진행 중: {evaluatingTaskInfo.task_title}</span>}
@@ -540,8 +540,9 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
 
         {/* Right: 3자 실시간 메시지 창 */}
         <div style={{
-          flex: 1,
-          minWidth: '350px',
+          flex: '1 1 320px',
+          minWidth: '280px',
+          minHeight: '300px',
           background: managementType === '관리형' ? '#f1f8e9' : '#f9f9f9',
           border: `1px solid ${managementType === '관리형' ? '#c5e1a5' : '#e0e0e0'}`,
           borderRadius: '12px',
