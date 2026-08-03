@@ -83,7 +83,6 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   useEffect(() => {
     if (selectedStudent) {
       fetchAttendanceHistory(selectedStudent);
-      fetchMessages(selectedStudent);
       fetchStudentSchedule(selectedStudent);
       
       const studentObj = students.find(s => s.user_id === selectedStudent);
