@@ -35,7 +35,8 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [voucherExpiry, setVoucherExpiry] = useState('');
   const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
-  const TIME_OPTIONS_24H = React.useMemo(() => {
+  const [adminSelectedDayTab, setAdminSelectedDayTab] = useState<string>('월');
+  const TIME_OPTIONS_24H = useMemo(() => {
     const options: string[] = [];
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 10) {
