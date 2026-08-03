@@ -25,15 +25,21 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           ENV_VARS=""
-          if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then ENV_VARS="GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"; fi
-          if [ -n "${{ secrets.GEMINI_MODEL }}" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}"; fi
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"; fi
-          if [ -n "${{ secrets.DATABASE_URL }}" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}DATABASE_URL=${{ secrets.DATABASE_URL }}"; fi
+          if [ -n "$GEMINI_API_KEY" ]; then ENV_VARS="GEMINI_API_KEY=${GEMINI_API_KEY}"; fi
+          if [ -n "$GEMINI_MODEL" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}GEMINI_MODEL=${GEMINI_MODEL}"; fi
+          if [ -n "$OPENAI_API_KEY" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}OPENAI_API_KEY=${OPENAI_API_KEY}"; fi
+          if [ -n "$DATABASE_URL" ]; then ENV_VARS="${ENV_VARS:+${ENV_VARS},}DATABASE_URL=${DATABASE_URL}"; fi
 
           PROJECT_FLAG=""
-          if [ -n "${{ secrets.GCP_PROJECT_ID }}" ]; then PROJECT_FLAG="--project=${{ secrets.GCP_PROJECT_ID }}"; fi
+          if [ -n "$GCP_PROJECT_ID" ]; then PROJECT_FLAG="--project=${GCP_PROJECT_ID}"; fi
 
           if [ -n "$ENV_VARS" ]; then
             gcloud run deploy ${{ env.SERVICE_NAME }} \

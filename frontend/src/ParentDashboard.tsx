@@ -19,14 +19,16 @@ export default function ParentDashboard() {
 
   const doFetchObserverCode = async (code: string) => {
     if (!code.trim()) return;
-    setObserverCode(code);
+    const cleanCode = code.trim();
+    setObserverCode(cleanCode);
     setLoading(true);
     setErrorMsg("");
     setScheduleData(null);
     setMessages([]);
     try {
-      const resp = await axios.get(`${API_URL}/knowledge/observe/${code}`);
+      const resp = await axios.get(`${API_URL}/knowledge/observe/${cleanCode}`);
       setScheduleData(resp.data.data);
+      localStorage.setItem('selfstudy_parent_code', cleanCode);
       if (resp.data.data.payload?.spreadsheet_data?.subjects?.length > 0) {
         setSelectedSubject(resp.data.data.payload.spreadsheet_data.subjects[0].subject_name);
       }
@@ -43,8 +45,10 @@ export default function ParentDashboard() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const codeParam = urlParams.get('parent_code') || urlParams.get('observer_code') || urlParams.get('code');
-    if (codeParam) {
-      doFetchObserverCode(codeParam.trim());
+    const savedCode = localStorage.getItem('selfstudy_parent_code');
+    const targetCode = codeParam || savedCode;
+    if (targetCode) {
+      doFetchObserverCode(targetCode.trim());
     }
   }, []);
 
@@ -163,20 +167,20 @@ export default function ParentDashboard() {
       </div>
 
       <h2 style={{ color: '#ff9800', textAlign: 'center', marginBottom: '10px' }}>👥 학부모 참관 대시보드</h2>
-      <p style={{ color: '#666', textAlign: 'center', marginBottom: '30px' }}>자녀가 공유해준 6자리 참관 코드를 입력하세요.</p>
+      <p style={{ color: '#666', textAlign: 'center', marginBottom: '30px' }}>자녀가 공유해준 참관 코드 (예: P-010-1234-5678)를 입력하세요.</p>
       
       <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '30px' }}>
         <input 
           type="text" 
           value={observerCode}
           onChange={e => setObserverCode(e.target.value.toUpperCase())}
-          placeholder="예: A1B2C3" 
-          maxLength={6}
-          style={{ width: '200px', padding: '12px', borderRadius: '8px', border: '2px solid #ccc', textAlign: 'center', fontSize: '18px', letterSpacing: '2px', textTransform: 'uppercase' }}
+          placeholder="예: P-010-1234-5678" 
+          maxLength={20}
+          style={{ width: '260px', padding: '12px', borderRadius: '8px', border: '2px solid #ccc', textAlign: 'center', fontSize: '16px', letterSpacing: '1px', textTransform: 'uppercase' }}
         />
         <button 
           type="submit" 
-          disabled={loading || observerCode.length < 6}
+          disabled={loading || !observerCode.trim()}
           style={{ background: '#ff9800', color: '#fff', border: 'none', padding: '0 25px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
         >
           {loading ? '조회 중...' : '조회하기'}

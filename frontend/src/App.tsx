@@ -25,6 +25,8 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showParentModal, setShowParentModal] = useState(false);
 
+  const [isParentDirect, setIsParentDirect] = useState(false);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -37,9 +39,29 @@ function App() {
       localStorage.setItem("selfstudy_session_id", sid);
     }
     setSessionId(sid);
+
+    // URL parameter 및 localStorage 학부모 참관 코드 확인
+    const urlParams = new URLSearchParams(window.location.search);
+    const parentCodeParam = urlParams.get('parent_code') || urlParams.get('observer_code') || urlParams.get('code');
+    if (parentCodeParam) {
+      localStorage.setItem('selfstudy_parent_code', parentCodeParam.trim());
+      setIsParentDirect(true);
+      setCurrentTab('parent');
+      setIsOnboarded(true);
+      return;
+    }
+
+    const savedParentCode = localStorage.getItem('selfstudy_parent_code');
+    const savedUserId = localStorage.getItem('selfstudy_saved_user_id');
+    if (savedParentCode && !savedUserId) {
+      setIsParentDirect(true);
+      setCurrentTab('parent');
+      setIsOnboarded(true);
+    }
   }, []);
 
   const handleLogin = async (id: string) => {
+    setIsParentDirect(false);
     setLoggedInUserId(id);
     setSessionId(id); // 사용자의 전화번호를 세션 ID로 사용
     localStorage.setItem("selfstudy_session_id", id);
@@ -94,11 +116,17 @@ function App() {
     setCurrentTab('onboarding');
   };
 
+  const handleParentDirect = (code: string) => {
+    if (code) {
+      localStorage.setItem('selfstudy_parent_code', code.trim());
+    }
+    setIsParentDirect(true);
+    setCurrentTab('parent');
+    setIsOnboarded(true);
+  };
+
   const handleReschedule = () => {
     setIsOnboarded(false); // 리스케줄링 시 온보딩을 다시 처음부터? (기존 로직: 챗봇 진입)
-    // 15단계 개편에서는 초기 Form부터 다시 하거나, 
-    // 혹은 백엔드에서 기존 폼 데이터를 다시 가져와서 ScheduleBuilderWizard에 넘겨야 함
-    // 현재는 단순히 초기화하여 다시 시작하도록 설정
     setCurrentTab('onboarding');
     setIsSidebarOpen(false);
   };
@@ -107,10 +135,12 @@ function App() {
     setLoggedInUserId(null);
     setUserName('');
     setIsOnboarded(false);
+    setIsParentDirect(false);
     setActiveScheduleId(null);
     setIsSidebarOpen(false);
     localStorage.removeItem('selfstudy_saved_user_id');
     localStorage.removeItem('selfstudy_saved_user_name');
+    localStorage.removeItem('selfstudy_parent_code');
   };
 
   const handleMenuClick = (tab: any, isOnboardedVal: boolean) => {
@@ -121,8 +151,8 @@ function App() {
 
   if (!sessionId) return <div>Loading...</div>;
 
-  if (!loggedInUserId) {
-    return <Login onLogin={handleLogin} />;
+  if (!loggedInUserId && !isParentDirect && currentTab !== 'parent') {
+    return <Login onLogin={handleLogin} onOpenParentView={handleParentDirect} />;
   }
 
   return (

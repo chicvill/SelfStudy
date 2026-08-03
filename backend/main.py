@@ -387,53 +387,60 @@ async def api_generate_unit_weights(payload: GenUnitWeightsPayload):
 
 @app.post("/knowledge/generate_schedule_final")
 async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
-    draft = context.scheduler.calculate_schedule(payload.form_data, payload.ai_draft)
-    
-    chat_history = [
-        {"role": "user", "content": "[시스템: 단계별 스케줄 생성이 완료되었습니다.]"},
-        {"role": "assistant", "content": "스케줄 생성이 완료되었습니다! 대시보드에서 일정을 확인하세요."}
-    ]
-    
-    user_id = payload.form_data.get("user_id", f"user_{uuid.uuid4().hex[:6]}")
-    
-    # 1. Goal 저장
-    goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
-    tags = ["대화형온보딩", payload.form_data.get("목표", "기본목표")]
-    context.knowledge_repo.insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=payload.form_data)
-    
-    # 2. Schedule 저장 및 Observer Code 발급
-    import random, string
-    observer_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
-    
-    draft["ref_goal_id"] = goal_id 
-    draft["observer_code"] = observer_code
-    draft["session_id"] = payload.session_id
-    new_tags = tags + ["최종스케줄", f"obs_{observer_code}", f"sess_{payload.session_id}"]
-    
-    # 만약 기존에 일정이 있었다면 superseded 처리 (리스케줄링 대비)
-    search_tag = f"sess_{payload.session_id}"
-    old_results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=5)
-    for old_doc in old_results:
-        if old_doc["payload"].get("status") != "superseded":
-            old_doc["payload"]["status"] = "superseded"
-            context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
-            draft["ref_previous_schedule_id"] = old_doc["doc_id"]
-            break
+    try:
+        draft = context.scheduler.calculate_schedule(payload.form_data or {}, payload.ai_draft or {})
+        
+        chat_history = [
+            {"role": "user", "content": "[시스템: 단계별 스케줄 생성이 완료되었습니다.]"},
+            {"role": "assistant", "content": "스케줄 생성이 완료되었습니다! 대시보드에서 일정을 확인하세요."}
+        ]
+        
+        form_data = payload.form_data or {}
+        user_id = form_data.get("user_id", f"user_{uuid.uuid4().hex[:6]}")
+        
+        # 1. Goal 저장
+        goal_id = f"kb_goal_{uuid.uuid4().hex[:8]}"
+        tags = ["대화형온보딩", form_data.get("목표", "기본목표")]
+        context.knowledge_repo.insert_knowledge(doc_id=goal_id, domain_type="GoalSetting", tags=tags, payload=form_data)
+        
+        # 2. Schedule 저장 및 Observer Code 발급
+        import random, string
+        observer_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
+        
+        draft["ref_goal_id"] = goal_id 
+        draft["observer_code"] = observer_code
+        draft["session_id"] = payload.session_id
+        new_tags = tags + ["최종스케줄", f"obs_{observer_code}", f"sess_{payload.session_id}"]
+        
+        # 만약 기존에 일정이 있었다면 superseded 처리 (리스케줄링 대비)
+        search_tag = f"sess_{payload.session_id}"
+        old_results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=5)
+        for old_doc in old_results:
+            if old_doc.get("payload", {}).get("status") != "superseded":
+                old_doc["payload"]["status"] = "superseded"
+                context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+                draft["ref_previous_schedule_id"] = old_doc["doc_id"]
+                break
 
-    context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
-    
-    context.chat_repo.save_chat_session(
-        session_id=payload.session_id,
-        user_id=user_id,
-        current_stage=3,
-        chat_history=chat_history,
-        collected_data=payload.form_data,
-        draft_schedule=draft,
-        is_finalized=True
-    )
-    
-    return {"status": "success", "draft_schedule": draft}
+        context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
+        
+        context.chat_repo.save_chat_session(
+            session_id=payload.session_id,
+            user_id=user_id,
+            current_stage=3,
+            chat_history=chat_history,
+            collected_data=form_data,
+            draft_schedule=draft,
+            is_finalized=True
+        )
+        
+        return {"status": "success", "draft_schedule": draft}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[GENERATE_SCHEDULE_FINAL ERROR] {e}")
+        raise HTTPException(status_code=500, detail=f"스케줄 생성 오류: {str(e)}")
 
 @app.post("/knowledge/chat")
 async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):

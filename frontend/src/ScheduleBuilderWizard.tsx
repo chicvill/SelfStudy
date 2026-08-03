@@ -142,23 +142,39 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
 
   const finalizeSchedule = async () => {
     setLoading(true);
+    setError('');
     try {
+      const cleanSubjects = subjects.map(s => ({
+        ...s,
+        weight_percent: Number(s.weight_percent) || 0,
+        units: (s.units || []).map((u: any) => ({
+          unit_name: typeof u === 'string' ? u : (u.unit_name || '단원'),
+          weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0
+        }))
+      }));
+
       const aiDraft = {
-        plan_title: planTitle,
-        overall_strategy: overallStrategy,
-        target_date_iso: targetDateIso,
-        subjects: subjects
+        plan_title: planTitle || "맞춤형 진도 계획",
+        overall_strategy: overallStrategy || "",
+        target_date_iso: targetDateIso || goalData?.마감일 || "",
+        subjects: cleanSubjects
       };
       
-      await axios.post(`${API_URL}/knowledge/generate_schedule_final`, {
-        form_data: { ...goalData, user_id: userId },
+      const res = await axios.post(`${API_URL}/knowledge/generate_schedule_final`, {
+        form_data: { ...(goalData || {}), user_id: userId },
         ai_draft: aiDraft,
         session_id: sessionId
       });
-      
-      onFinalized();
-    } catch (err) {
-      setError("최종 스케줄 생성 중 오류가 발생했습니다.");
+
+      if (res.data && res.data.status === 'success') {
+        onFinalized();
+      } else {
+        setError(res.data?.message || "스케줄 생성 중 오류가 발생하였습니다.");
+      }
+    } catch (err: any) {
+      console.error("Finalize schedule error:", err);
+      const detail = err.response?.data?.detail || err.message || "서버 통신 오류";
+      setError(`최종 스케줄 생성 중 오류가 발생하였습니다 (${detail})`);
     }
     setLoading(false);
   };
@@ -206,7 +222,7 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
       </div>
 
       {loading && <div style={{ textAlign: 'center', color: '#666', margin: '20px 0' }}>AI가 계산 중입니다. 잠시만 기다려주세요... ⏳</div>}
-      {error && <div style={{ color: 'red', marginBottom: '20px' }}>{error}</div>}
+      {error && <div style={{ color: 'red', marginBottom: '20px', background: '#ffebee', padding: '12px', borderRadius: '8px', border: '1px solid #ffcdd2' }}>{error}</div>}
 
       {!loading && step === 2 && (
         <div>
@@ -227,7 +243,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
             <button onClick={handleAddSubject} style={{ background: '#f5f5f5', color: '#333', border: '1px solid #ccc', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>+ 과목 추가</button>
             <button onClick={generateSubjects} style={{ background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🔄 AI로 새로 생성</button>
           </div>
-          <div style={{ marginTop: '30px', textAlign: 'right' }}>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => window.location.reload()} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 목표 재입력</button>
             <button onClick={generateSubjectWeights} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (과목 비중 산출) ➡️</button>
           </div>
         </div>
@@ -253,7 +270,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
               {subjects.reduce((a, b) => a + (b.weight_percent || 0), 0)}%
             </span>
           </div>
-          <div style={{ marginTop: '30px', textAlign: 'right' }}>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => setStep(2)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 이전 단계 (과목 확정)</button>
             <button onClick={generateUnits} disabled={subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) !== 100} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', opacity: subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) === 100 ? 1 : 0.5 }}>다음 단계 (단원 생성) ➡️</button>
           </div>
         </div>
@@ -282,7 +300,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
               </div>
             ))}
           </div>
-          <div style={{ marginTop: '30px', textAlign: 'right' }}>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => setStep(3)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 이전 단계 (과목 비중)</button>
             <button onClick={generateUnitWeights} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (단원 비중 산출) ➡️</button>
           </div>
         </div>
@@ -317,7 +336,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
             })}
           </div>
           
-          <div style={{ marginTop: '30px', textAlign: 'right' }}>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => setStep(4)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '15px 25px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>⬅️ 이전 단계 (단원 확정)</button>
             <button 
               onClick={finalizeSchedule} 
               disabled={subjects.some(s => (s.units||[]).reduce((a:any,b:any)=>a+(b.weight_percent||0),0) !== 100)}

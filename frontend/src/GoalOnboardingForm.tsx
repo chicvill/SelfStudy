@@ -98,13 +98,38 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   };
 
   const handleTimeChange = (day: string, type: 'in' | 'out' | 'consult', val: string) => {
-    setScheduledTimes(prev => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [type]: val
+    setScheduledTimes(prev => {
+      const updated = {
+        ...prev,
+        [day]: {
+          ...prev[day],
+          [type]: val
+        }
+      };
+      // 월요일 설정 시 화요일~일요일 기본값으로 일괄 연동 (개별 요일은 별도 수정 가능)
+      if (day === '월') {
+        ['화', '수', '목', '금', '토', '일'].forEach(otherDay => {
+          if (updated[otherDay]) {
+            updated[otherDay] = {
+              ...updated[otherDay],
+              [type]: val
+            };
+          }
+        });
       }
-    }));
+      return updated;
+    });
+  };
+
+  const handleApplyMondayToAll = () => {
+    const mondayVal = scheduledTimes['월'] || { in: '09:00', out: '18:00', consult: '17:30' };
+    setScheduledTimes(prev => {
+      const updated = { ...prev };
+      daysOfWeek.forEach(d => {
+        updated[d] = { ...mondayVal };
+      });
+      return updated;
+    });
   };
 
   const handleToggleDay = (day: string) => {
@@ -298,11 +323,20 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
           {/* 요일별 시간표 설정 */}
           {activeDaysList.length > 0 && (
             <div style={{ marginTop: '20px', background: '#fff', padding: '20px', borderRadius: '15px', border: '1px solid #ffe0b2' }}>
-              <h4 style={{ margin: '0 0 15px 0', color: '#e65100', fontSize: '15px', fontWeight: 'bold' }}>
-                ⏰ 요일별 입퇴실 시간 및 상담 스케줄 설정
-              </h4>
-              <p style={{ color: '#888', fontSize: '12px', marginTop: '-10px', marginBottom: '20px' }}>
-                * 등하원 예정 시간 간격이 진도 계획 수립 시간으로 자동 반영됩니다.
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                <h4 style={{ margin: 0, color: '#e65100', fontSize: '15px', fontWeight: 'bold' }}>
+                  ⏰ 요일별 입퇴실 시간 및 상담 스케줄 설정
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleApplyMondayToAll}
+                  style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                >
+                  📋 월요일 시간표 전체 요일에 재적용
+                </button>
+              </div>
+              <p style={{ color: '#888', fontSize: '12px', marginTop: '0', marginBottom: '20px' }}>
+                * 월요일 시간을 변경하면 화~일요일 시간표에 기본값(디폴트)으로 자동 설정되며, 요일별 개별 수정이 가능합니다.
               </p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

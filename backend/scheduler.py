@@ -74,16 +74,31 @@ class Scheduler:
         # 2. Calculate unit requirements
         subject_queues = {}
         for subj in ai_draft.get("subjects", []):
-            subj_name = subj["subject_name"]
-            subj_w = subj.get("weight_percent", 0) / 100.0
+            if not isinstance(subj, dict):
+                continue
+            subj_name = subj.get("subject_name", "미정 과목")
+            try:
+                subj_w = float(subj.get("weight_percent") or 0) / 100.0
+            except (ValueError, TypeError):
+                subj_w = 0.0
             subj_total_mins = total_capacity * subj_w
             
             unit_q = []
-            for u in subj.get("units", []):
-                u_w = u.get("weight_percent", 0) / 100.0
-                u_mins = int(subj_total_mins * u_w)
+            raw_units = subj.get("units", [])
+            for u in raw_units:
+                if isinstance(u, dict):
+                    u_name = u.get("unit_name", "단원")
+                    try:
+                        u_w = float(u.get("weight_percent") or 0) / 100.0
+                    except (ValueError, TypeError):
+                        u_w = 0.0
+                else:
+                    u_name = str(u)
+                    u_w = (1.0 / len(raw_units)) if raw_units else 1.0
+
+                u_mins = max(1, int(subj_total_mins * u_w)) if subj_total_mins > 0 else 30
                 unit_q.append({
-                    "unit_name": u["unit_name"],
+                    "unit_name": u_name,
                     "required_mins": u_mins,
                     "remaining_mins": u_mins
                 })
@@ -100,26 +115,36 @@ class Scheduler:
             daily_tasks = []
             
             for subj in ai_draft.get("subjects", []):
-                subj_name = subj["subject_name"]
-                subj_w = subj.get("weight_percent", 0) / 100.0
+                if not isinstance(subj, dict):
+                    continue
+                subj_name = subj.get("subject_name", "미정 과목")
+                try:
+                    subj_w = float(subj.get("weight_percent") or 0) / 100.0
+                except (ValueError, TypeError):
+                    subj_w = 0.0
                 alloc_mins = int(day_info["capacity"] * subj_w)
                 
-                q = subject_queues[subj_name]
+                q = subject_queues.get(subj_name, [])
                 
                 while alloc_mins > 0 and q:
                     curr_unit = q[0]
+                    if curr_unit["remaining_mins"] <= 0:
+                        q.pop(0)
+                        continue
+
                     if curr_unit["remaining_mins"] <= alloc_mins:
                         spent = curr_unit["remaining_mins"]
                         alloc_mins -= spent
-                        daily_tasks.append({
-                            "day": f"Week {week_num} - {day_info['day_str']}",
-                            "date": day_info["date"],
-                            "subject": subj_name,
-                            "unit_name": curr_unit["unit_name"],
-                            "task_title": curr_unit["unit_name"],
-                            "estimated_minutes": spent,
-                            "completed": False
-                        })
+                        if spent > 0:
+                            daily_tasks.append({
+                                "day": f"Week {week_num} - {day_info['day_str']}",
+                                "date": day_info["date"],
+                                "subject": subj_name,
+                                "unit_name": curr_unit["unit_name"],
+                                "task_title": curr_unit["unit_name"],
+                                "estimated_minutes": spent,
+                                "completed": False
+                            })
                         q.pop(0)
                     else:
                         curr_unit["remaining_mins"] -= alloc_mins
@@ -139,7 +164,8 @@ class Scheduler:
                 week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
                 schedule_result.append(week_entry)
                 
-            week_entry["daily_tasks"].extend(daily_tasks)
+            if isinstance(week_entry.get("daily_tasks"), list):
+                week_entry["daily_tasks"].extend(daily_tasks)
 
         return {
             "plan_title": ai_draft.get("plan_title", "맞춤형 진도 계획"),
@@ -157,16 +183,18 @@ class Scheduler:
         uncompleted_tasks = []
         
         for week in active_schedule_payload.get("curriculum", []):
-            for task in week.get("daily_tasks", []):
-                # Ensure week_number is preserved inside the task object for tracking
-                task_with_week = {**task}
-                if "week_number" not in task_with_week:
-                    task_with_week["week_number"] = week.get("week_number", 1)
-                
-                if task.get("completed"):
-                    completed_tasks.append(task_with_week)
-                else:
-                    uncompleted_tasks.append(task_with_week)
+            if isinstance(week, dict):
+                for task in week.get("daily_tasks", []):
+                    if isinstance(task, dict):
+                        # Ensure week_number is preserved inside the task object for tracking
+                        task_with_week = {**task}
+                        if "week_number" not in task_with_week:
+                            task_with_week["week_number"] = week.get("week_number", 1)
+                        
+                        if task.get("completed"):
+                            completed_tasks.append(task_with_week)
+                        else:
+                            uncompleted_tasks.append(task_with_week)
                     
         # 2. 미완료 태스크들로부터 과목별 남은 분량(큐) 재구성
         subject_queues = {}
@@ -192,11 +220,14 @@ class Scheduler:
         start_date = datetime.now()
         target_date_str = active_schedule_payload.get("target_date_iso") or form_data.get("마감일")
         
-        try:
-            target_date = datetime.strptime(target_date_str, "%Y-%m-%d")
-            if target_date < start_date:
+        if target_date_str and isinstance(target_date_str, str):
+            try:
+                target_date = datetime.strptime(target_date_str, "%Y-%m-%d")
+                if target_date < start_date:
+                    target_date = start_date + timedelta(days=30)
+            except Exception:
                 target_date = start_date + timedelta(days=30)
-        except:
+        else:
             target_date = start_date + timedelta(days=30)
             
         avail_days_str = form_data.get("공부가능요일", [])
@@ -211,12 +242,12 @@ class Scheduler:
                 if day_str in self.day_map:
                     try:
                         day_mins_map[self.day_map[day_str]] = int(float(hours) * 60)
-                    except:
+                    except (ValueError, TypeError):
                         day_mins_map[self.day_map[day_str]] = 120
         else:
             try:
                 default_hours = float(str(raw_hours).replace("시간", "").strip())
-            except:
+            except (ValueError, TypeError):
                 default_hours = 2.0
             default_mins = int(default_hours * 60)
             for d in avail_days:
@@ -236,10 +267,20 @@ class Scheduler:
 
         # 4. 새로운 달력에 남은 큐 분배
         schedule_result = []
-        max_completed_week = max([t.get("week_number", 0) for t in completed_tasks]) if completed_tasks else 0
+        max_completed_week = max([int(t.get("week_number", 0)) for t in completed_tasks]) if completed_tasks else 0
         week_num = max_completed_week + 1
         
-        subjects_weights = {s["subject_name"]: s.get("weight_percent", 0)/100.0 for s in active_schedule_payload.get("spreadsheet_data", {}).get("subjects", [])}
+        spreadsheet_data = active_schedule_payload.get("spreadsheet_data")
+        raw_subjects = (spreadsheet_data if isinstance(spreadsheet_data, dict) else {}).get("subjects", [])
+        subjects_weights = {}
+        if isinstance(raw_subjects, list):
+            for s in raw_subjects:
+                if isinstance(s, dict) and "subject_name" in s:
+                    try:
+                        subjects_weights[s["subject_name"]] = float(s.get("weight_percent") or 0) / 100.0
+                    except (ValueError, TypeError):
+                        subjects_weights[s["subject_name"]] = 0.0
+
         if not subjects_weights:
             subjects_weights = {subj: 1.0/len(subject_queues) for subj in subject_queues}
             
@@ -250,23 +291,28 @@ class Scheduler:
             daily_tasks = []
             
             for subj_name, q in list(subject_queues.items()):
-                subj_w = subjects_weights.get(subj_name, 0.1)
+                subj_w = float(subjects_weights.get(subj_name, 0.1) or 0.1)
                 alloc_mins = int(day_info["capacity"] * subj_w)
                 
                 while alloc_mins > 0 and q:
                     curr_unit = q[0]
+                    if curr_unit["remaining_mins"] <= 0:
+                        q.pop(0)
+                        continue
+
                     if curr_unit["remaining_mins"] <= alloc_mins:
                         spent = curr_unit["remaining_mins"]
                         alloc_mins -= spent
-                        daily_tasks.append({
-                            "day": f"Week {week_num} - {day_info['day_str']}",
-                            "date": day_info["date"],
-                            "subject": subj_name,
-                            "unit_name": curr_unit["unit_name"],
-                            "task_title": curr_unit["unit_name"],
-                            "estimated_minutes": spent,
-                            "completed": False
-                        })
+                        if spent > 0:
+                            daily_tasks.append({
+                                "day": f"Week {week_num} - {day_info['day_str']}",
+                                "date": day_info["date"],
+                                "subject": subj_name,
+                                "unit_name": curr_unit["unit_name"],
+                                "task_title": curr_unit["unit_name"],
+                                "estimated_minutes": spent,
+                                "completed": False
+                            })
                         q.pop(0)
                     else:
                         curr_unit["remaining_mins"] -= alloc_mins
@@ -287,7 +333,8 @@ class Scheduler:
                     week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
                     schedule_result.append(week_entry)
                 
-                week_entry["daily_tasks"].extend(daily_tasks)
+                if isinstance(week_entry.get("daily_tasks"), list):
+                    week_entry["daily_tasks"].extend(daily_tasks)
 
         # 5. 완료된 태스크들과 새로 생성된 태스크들 병합
         final_curriculum = []

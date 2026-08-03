@@ -4,9 +4,10 @@ import { API_URL } from './config';
 
 interface LoginProps {
   onLogin: (userId: string) => void;
+  onOpenParentView?: (parentCode: string) => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, onOpenParentView }: LoginProps) {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [userId, setUserId] = useState(() => localStorage.getItem('selfstudy_saved_user_id') || '');
   const [password, setPassword] = useState('');
@@ -15,9 +16,27 @@ export default function Login({ onLogin }: LoginProps) {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // 010-XXXX-XXXX 형식 자동 하이픈 마스킹
+  // 010-XXXX-XXXX 또는 P-010-XXXX-XXXX 형식 지원
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/[^0-9]/g, '');
+    let raw = e.target.value;
+    // P- 접두사가 들어온 경우
+    if (raw.toUpperCase().startsWith('P-')) {
+      let digits = raw.slice(2).replace(/[^0-9]/g, '');
+      let formatted = 'P-';
+      if (digits.length > 3 && digits.length <= 7) {
+        formatted += digits.slice(0, 3) + '-' + digits.slice(3);
+      } else if (digits.length > 7) {
+        formatted += digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7, 11);
+      } else {
+        formatted += digits;
+      }
+      setUserId(formatted);
+      setErrorMessage('');
+      return;
+    }
+
+    // 숫지만 있는 일반 전화번호 형식
+    let val = raw.replace(/[^0-9]/g, '');
     if (val.length > 3 && val.length <= 7) {
       val = val.slice(0, 3) + '-' + val.slice(3);
     } else if (val.length > 7) {
@@ -36,10 +55,13 @@ export default function Login({ onLogin }: LoginProps) {
     const pw = password.trim();
     const userName = name.trim();
 
-    if (!id) {
-      setErrorMessage('아이디(전화번호)를 입력해 주세요.');
-      return;
+    if (id.toUpperCase().startsWith('P-')) {
+      if (onOpenParentView) {
+        onOpenParentView(id);
+        return;
+      }
     }
+
     if (!pw) {
       setErrorMessage('비밀번호를 입력해 주세요.');
       return;
@@ -51,7 +73,7 @@ export default function Login({ onLogin }: LoginProps) {
 
     const phoneRegex = /^010-[0-9]{4}-[0-9]{4}$/;
     if (!phoneRegex.test(id)) {
-      setErrorMessage('아이디는 전화번호(010-1234-5678) 형식이어야 합니다.');
+      setErrorMessage('아이디는 전화번호(010-1234-5678) 또는 참관 코드(P-010-1234-5678) 형식이어야 합니다.');
       return;
     }
 
@@ -327,14 +349,37 @@ export default function Login({ onLogin }: LoginProps) {
           </button>
         </form>
 
-        {/* 퀵 관리자 채우기 팁 */}
+        {/* 퀵 관리자 및 학부모 참관 채우기 팁 */}
         {isLoginMode && (
           <div style={{
             marginTop: '24px',
             paddingTop: '16px',
             borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
             textAlign: 'center'
           }}>
+            {onOpenParentView && (
+              <button
+                type="button"
+                onClick={() => onOpenParentView(userId.trim())}
+                style={{
+                  background: 'linear-gradient(135deg, #ff9800 0%, #ed6c02 100%)',
+                  border: 'none',
+                  color: '#ffffff',
+                  padding: '11px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(237, 108, 2, 0.25)'
+                }}
+              >
+                👥 학부모 참관 대시보드로 바로 이동
+              </button>
+            )}
+            
             <button
               type="button"
               onClick={handleAdminQuickFill}
