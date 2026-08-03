@@ -362,33 +362,10 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
             {/* 선택된 요일 단일 입력 카드 (시간 입력창 + 삭제 + 확인 같은 라인) */}
             {(() => {
               const day = selectedDayTab;
-              const isConfigured = activeDaysList.includes(day) && !!scheduledTimes[day];
-              const duration = calculateHours(workingTime.in, workingTime.out);
 
               return (
                 <div style={{ background: '#fff', padding: '20px', borderRadius: '0 0 15px 15px', border: '2px solid #ffe0b2', borderTop: 'none', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '15px', color: isConfigured ? '#e65100' : '#333', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>📌 [{day}요일] 학습 시간 설정</span>
-                      {isConfigured ? (
-                        <span style={{ fontSize: '12px', background: '#ffe0b2', color: '#e65100', padding: '3px 8px', borderRadius: '6px' }}>
-                          설정완료 ({duration}시간)
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '12px', background: '#eee', color: '#666', padding: '3px 8px', borderRadius: '6px' }}>
-                          미설정 (확인을 누르면 이전 입력시간이 저장됩니다)
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyDayToAll(day)}
-                      style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                    >
-                      📋 {day}요일 시간표 전체 요일에 적용
-                    </button>
-                  </div>
+                  {/* 등원, 하원, 상담 입력창과 삭제, 확인 버튼 한 라인 배치 */}
 
                   {/* 등원, 하원, 상담 입력창과 삭제, 확인 버튼 한 라인 배치 */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: '#fafafa', padding: '15px', borderRadius: '10px', border: '1px solid #eee' }}>

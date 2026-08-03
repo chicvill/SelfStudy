@@ -835,20 +835,8 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
 
                     {/* 선택된 요일 약속시간 단일 편집 영역 (입력창 + 확인 + 삭제 한 라인) */}
                     {(() => {
-                      const day = adminSelectedDayTab;
-                      const isConfigured = !!editScheduledTimes[day];
-
                       return (
                         <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #ffe0b2', marginBottom: '15px' }}>
-                          <div style={{ fontWeight: 'bold', fontSize: '14px', color: isConfigured ? '#e65100' : '#333', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>📌 [{day}요일] 약속 시간 설정</span>
-                            {isConfigured ? (
-                              <span style={{ fontSize: '11px', background: '#ffe0b2', color: '#e65100', padding: '2px 6px', borderRadius: '4px' }}>설정완료</span>
-                            ) : (
-                              <span style={{ fontSize: '11px', background: '#eee', color: '#666', padding: '2px 6px', borderRadius: '4px' }}>미설정 (확인 클릭 시 이전 입력시간 저장)</span>
-                            )}
-                          </div>
-
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#fafafa', padding: '12px', borderRadius: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>등원:</label>
