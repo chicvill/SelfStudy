@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
 import { API_URL } from './config';
@@ -42,7 +42,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
 
   const daysOfWeek = ['월', '화', '수', '목', '금', '토', '일'];
 
-  const TIME_OPTIONS_24H = React.useMemo(() => {
+  const TIME_OPTIONS_24H = useMemo(() => {
     const options: string[] = [];
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 10) {
