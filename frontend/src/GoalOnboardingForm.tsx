@@ -90,7 +90,10 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       .catch(err => console.error("Failed to load session", err));
   }, [userId, sessionId]);
 
+  const [selectedDayTab, setSelectedDayTab] = useState<string>('월');
+
   const calculateHours = (inTime: string, outTime: string) => {
+    if (!inTime || !outTime) return 0;
     const [inH, inM] = inTime.split(':').map(Number);
     const [outH, outM] = outTime.split(':').map(Number);
     const diffMins = (outH * 60 + outM) - (inH * 60 + inM);
@@ -98,38 +101,25 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   };
 
   const handleTimeChange = (day: string, type: 'in' | 'out' | 'consult', val: string) => {
-    setScheduledTimes(prev => {
-      const updated = {
-        ...prev,
-        [day]: {
-          ...prev[day],
-          [type]: val
-        }
-      };
-      // 월요일 설정 시 화요일~일요일 기본값으로 일괄 연동 (개별 요일은 별도 수정 가능)
-      if (day === '월') {
-        ['화', '수', '목', '금', '토', '일'].forEach(otherDay => {
-          if (updated[otherDay]) {
-            updated[otherDay] = {
-              ...updated[otherDay],
-              [type]: val
-            };
-          }
-        });
+    setScheduledTimes(prev => ({
+      ...prev,
+      [day]: {
+        ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }),
+        [type]: val
       }
-      return updated;
-    });
+    }));
   };
 
-  const handleApplyMondayToAll = () => {
-    const mondayVal = scheduledTimes['월'] || { in: '09:00', out: '18:00', consult: '17:30' };
+  const handleApplyDayToAll = (sourceDay: string) => {
+    const sourceVal = scheduledTimes[sourceDay] || { in: '09:00', out: '18:00', consult: '17:30' };
     setScheduledTimes(prev => {
       const updated = { ...prev };
       daysOfWeek.forEach(d => {
-        updated[d] = { ...mondayVal };
+        updated[d] = { ...sourceVal };
       });
       return updated;
     });
+    alert(`[${sourceDay}요일] 시간 설정이 모든 요일에 동일하게 적용되었습니다.`);
   };
 
   const handleToggleDay = (day: string) => {
@@ -290,147 +280,177 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
             <input type="text" placeholder="예: 10월 5일까지, 4주 동안" value={targetDate} onChange={e => setTargetDate(e.target.value)} style={inputStyle} required />
           </div>
 
-          {/* 학습 요일 선택 */}
+          {/* 학습 요일 선택 & 요일별 시간 탭 입력 */}
           <div style={{ marginBottom: '25px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>학습 요일 선택 (필수)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: '#555' }}>
+              🗓️ 요일별 학습 시간 설정 (탭 선택)
+            </label>
+            
+            {/* 요일 선택 탭 바 */}
+            <div style={{ display: 'flex', borderBottom: '2px solid #ffe0b2', gap: '4px', flexWrap: 'wrap' }}>
               {daysOfWeek.map(day => {
-                const isActive = activeDaysList.includes(day);
+                const isSelected = selectedDayTab === day;
+                const isActiveDay = activeDaysList.includes(day);
+                const timeObj = scheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
+                const hours = isActiveDay ? calculateHours(timeObj.in, timeObj.out) : 0;
+
                 return (
                   <button
                     type="button"
                     key={day}
-                    onClick={() => handleToggleDay(day)}
+                    onClick={() => setSelectedDayTab(day)}
                     style={{
-                      padding: '12px 18px',
-                      borderRadius: '12px',
-                      border: isActive ? '2px solid #ff9800' : '1px solid #ccc',
-                      background: isActive ? '#fff3e0' : '#fff',
-                      color: isActive ? '#e65100' : '#333',
-                      fontWeight: isActive ? 'bold' : 'normal',
+                      padding: '10px 16px',
+                      borderRadius: '10px 10px 0 0',
+                      border: isSelected ? '2px solid #ff9800' : '1px solid #ddd',
+                      borderBottom: isSelected ? '2px solid #fff' : '1px solid #ddd',
+                      background: isSelected ? '#ff9800' : (isActiveDay ? '#fff3e0' : '#f5f5f5'),
+                      color: isSelected ? '#fff' : (isActiveDay ? '#e65100' : '#777'),
+                      fontWeight: 'bold',
+                      fontSize: '14px',
                       cursor: 'pointer',
-                      flex: '1 1 80px',
-                      textAlign: 'center'
+                      marginBottom: '-2px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
                     }}
                   >
-                    {day}요일
+                    <span>{day}요일</span>
+                    {isActiveDay ? (
+                      <span style={{ fontSize: '11px', background: isSelected ? '#fff' : '#ffe0b2', color: isSelected ? '#e65100' : '#d84315', padding: '2px 6px', borderRadius: '10px' }}>
+                        {hours}h
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '10px', opacity: 0.7 }}>(휴무)</span>
+                    )}
                   </button>
                 );
               })}
             </div>
-          </div>
 
-          {/* 요일별 시간표 설정 */}
-          {activeDaysList.length > 0 && (
-            <div style={{ marginTop: '20px', background: '#fff', padding: '20px', borderRadius: '15px', border: '1px solid #ffe0b2' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
-                <h4 style={{ margin: 0, color: '#e65100', fontSize: '15px', fontWeight: 'bold' }}>
-                  ⏰ 요일별 입퇴실 시간 및 상담 스케줄 설정
-                </h4>
-                <button
-                  type="button"
-                  onClick={handleApplyMondayToAll}
-                  style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                >
-                  📋 월요일 시간표 전체 요일에 재적용
-                </button>
-              </div>
-              
-              {/* 주간 총 공부시간 계산 및 버아웃 경고 */}
-              {(() => {
-                let totalMins = 0;
-                activeDaysList.forEach(d => {
-                  const t = scheduledTimes[d] || { in: '09:00', out: '18:00' };
-                  const [inH, inM] = t.in.split(':').map(Number);
-                  const [outH, outM] = t.out.split(':').map(Number);
-                  const diff = (outH * 60 + outM) - (inH * 60 + inM);
-                  if (diff > 0) totalMins += diff;
-                });
-                const weeklyHours = Math.round(totalMins / 60);
-                const isOver60 = weeklyHours > 60;
-                return (
-                  <div style={{ marginBottom: '15px', padding: '10px', borderRadius: '8px', background: isOver60 ? '#fff3e0' : '#e8f5e9', border: `1px solid ${isOver60 ? '#ffe0b2' : '#c8e6c9'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: isOver60 ? '#e65100' : '#2e7d32' }}>
-                      📊 예상 주간 총 학습 시간: {weeklyHours}시간
-                    </span>
-                    {isOver60 && (
-                      <span style={{ fontSize: '12px', color: '#d32f2f', fontWeight: 'bold', background: '#ffebee', padding: '4px 8px', borderRadius: '6px' }}>
-                        💡 주 60시간 초과: 무리한 계획은 버아웃을 유발할 수 있습니다!
+            {/* 선택된 요일 단일 입력 카드 */}
+            {(() => {
+              const day = selectedDayTab;
+              const isActiveDay = activeDaysList.includes(day);
+              const timeObj = scheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
+              const duration = isActiveDay ? calculateHours(timeObj.in, timeObj.out) : 0;
+
+              return (
+                <div style={{ background: '#fff', padding: '20px', borderRadius: '0 0 15px 15px', border: '2px solid #ffe0b2', borderTop: 'none', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>
+                        <input
+                          type="checkbox"
+                          checked={isActiveDay}
+                          onChange={() => handleToggleDay(day)}
+                          style={{ width: '18px', height: '18px', accentColor: '#ff9800' }}
+                        />
+                        📌 {day}요일을 학습 가능 요일로 설정
+                      </label>
+                    </div>
+
+                    {isActiveDay && (
+                      <span style={{ fontSize: '13px', background: '#ffe0b2', color: '#e65100', padding: '4px 10px', borderRadius: '8px', fontWeight: 'bold' }}>
+                        {day}요일 학습시간: {duration}시간
                       </span>
                     )}
                   </div>
-                );
-              })()}
 
-              {/* Buffer Sunday 옵션 */}
-              <div style={{ marginBottom: '15px', background: '#f5f5f5', padding: '10px 15px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <input
-                  type="checkbox"
-                  id="wantsBuffer"
-                  checked={wantsBuffer}
-                  onChange={e => setWantsBuffer(e.target.checked)}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
-                <label htmlFor="wantsBuffer" style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 'bold', color: '#444' }}>
-                  🗓️ 일요일을 '보충 학습/자율 휴식일(Buffer Day)'로 지정하여 주간 학습 완성도 높이기
-                </label>
-              </div>
-
-              <p style={{ color: '#888', fontSize: '12px', marginTop: '0', marginBottom: '20px' }}>
-                * 월요일 시간을 변경하면 화~일요일 시간표에 기본값(디폴트)으로 자동 설정되며, 요일별 개별 수정이 가능합니다.
-              </p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {activeDaysList.map(day => {
-                  const timeObj = scheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
-                  const duration = calculateHours(timeObj.in, timeObj.out);
-                  
-                  return (
-                    <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#fafafa', padding: '15px', borderRadius: '10px', border: '1px solid #eee' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 'bold', fontSize: '15px', color: '#333' }}>{day}요일 시간표</span>
-                        <span style={{ fontSize: '13px', background: '#ffe0b2', color: '#e65100', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
-                          공부 시간: {duration}시간
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '150px' }}>
-                          <span style={{ fontSize: '13px', color: '#666', minWidth: '60px' }}>입실 예정:</span>
+                  {isActiveDay ? (
+                    <>
+                      <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '150px' }}>
+                          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>⏰ 입실(등원) 예정 시각</label>
                           <input 
                             type="time" 
                             value={timeObj.in} 
                             onChange={e => handleTimeChange(day, 'in', e.target.value)}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', width: '100%' }}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', width: '100%', fontSize: '14px' }}
                           />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '150px' }}>
-                          <span style={{ fontSize: '13px', color: '#666', minWidth: '60px' }}>퇴실 예정:</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '150px' }}>
+                          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>🚪 퇴실(하원) 예정 시각</label>
                           <input 
                             type="time" 
                             value={timeObj.out} 
                             onChange={e => handleTimeChange(day, 'out', e.target.value)}
-                            style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', width: '100%' }}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', width: '100%', fontSize: '14px' }}
                           />
                         </div>
                         {managementType === '관리형' && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1.2, minWidth: '180px' }}>
-                            <span style={{ fontSize: '13px', color: '#e65100', minWidth: '60px', fontWeight: 'bold' }}>상담 예정:</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1.2, minWidth: '180px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#e65100' }}>💬 상담 예정 시각 (관리형)</label>
                             <input 
                               type="time" 
-                              value={timeObj.consult} 
+                              value={timeObj.consult || '17:30'} 
                               onChange={e => handleTimeChange(day, 'consult', e.target.value)}
-                              style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', outline: 'none', width: '100%', background: '#fff8e1' }}
+                              style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', width: '100%', background: '#fff8e1', fontSize: '14px' }}
                             />
                           </div>
                         )}
                       </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyDayToAll(day)}
+                          style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        >
+                          📋 {day}요일 설정 시간을 모든 요일에 동일 적용
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#888', background: '#fafafa', borderRadius: '8px', fontSize: '13px' }}>
+                      {day}요일은 휴무(자율 휴식일)로 지정되어 있습니다. 위 체크박스를 선택하여 학습 요일로 지정할 수 있습니다.
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 주간 총 공부시간 계산 및 버아웃 경고 */}
+            {(() => {
+              let totalMins = 0;
+              activeDaysList.forEach(d => {
+                const t = scheduledTimes[d] || { in: '09:00', out: '18:00' };
+                const [inH, inM] = t.in.split(':').map(Number);
+                const [outH, outM] = t.out.split(':').map(Number);
+                const diff = (outH * 60 + outM) - (inH * 60 + inM);
+                if (diff > 0) totalMins += diff;
+              });
+              const weeklyHours = Math.round(totalMins / 60);
+              const isOver60 = weeklyHours > 60;
+              return (
+                <div style={{ marginBottom: '15px', padding: '12px 15px', borderRadius: '8px', background: isOver60 ? '#fff3e0' : '#e8f5e9', border: `1px solid ${isOver60 ? '#ffe0b2' : '#c8e6c9'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: isOver60 ? '#e65100' : '#2e7d32' }}>
+                    📊 예상 주간 총 학습 시간: {weeklyHours}시간 (학습 요일 {activeDaysList.length}일)
+                  </span>
+                  {isOver60 && (
+                    <span style={{ fontSize: '12px', color: '#d32f2f', fontWeight: 'bold', background: '#ffebee', padding: '4px 8px', borderRadius: '6px' }}>
+                      💡 주 60시간 초과: 무리한 계획은 버아웃을 유발할 수 있습니다!
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Buffer Sunday 옵션 */}
+            <div style={{ marginBottom: '15px', background: '#f5f5f5', padding: '10px 15px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="checkbox"
+                id="wantsBuffer"
+                checked={wantsBuffer}
+                onChange={e => setWantsBuffer(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <label htmlFor="wantsBuffer" style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 'bold', color: '#444' }}>
+                🗓️ 일요일을 '보충 학습/자율 휴식일(Buffer Day)'로 지정하여 주간 학습 완성도 높이기
+              </label>
             </div>
-          )}
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 'bold', color: '#555' }}>

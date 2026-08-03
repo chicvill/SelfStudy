@@ -35,6 +35,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [voucherExpiry, setVoucherExpiry] = useState('');
   const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
+  const [adminSelectedDayTab, setAdminSelectedDayTab] = useState<string>('월');
 
   // Admin Real-time Emergency Alerts State
   const [adminAlerts, setAdminAlerts] = useState<{ late_students: any[]; recent_messages: any[] }>({
@@ -777,54 +778,92 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
 
                 {isScheduleExpanded && (
                   <div style={{ marginTop: '20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                    {/* 요일 선택 탭 바 */}
+                    <div style={{ display: 'flex', borderBottom: '2px solid #ffe0b2', gap: '4px', marginBottom: '15px', flexWrap: 'wrap' }}>
                       {daysOfWeek.map(day => {
-                        const scheduled = editScheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
+                        const isSelected = adminSelectedDayTab === day;
                         return (
-                          <div key={day} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 'bold', width: '50px' }}>{day}요일</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>등원:</span>
+                          <button
+                            type="button"
+                            key={day}
+                            onClick={() => setAdminSelectedDayTab(day)}
+                            style={{
+                              padding: '8px 14px',
+                              borderRadius: '8px 8px 0 0',
+                              border: isSelected ? '2px solid #e65100' : '1px solid #ccc',
+                              borderBottom: isSelected ? '2px solid #fff' : '1px solid #ccc',
+                              background: isSelected ? '#e65100' : '#fff',
+                              color: isSelected ? '#fff' : '#444',
+                              fontWeight: 'bold',
+                              fontSize: '13px',
+                              cursor: 'pointer',
+                              marginBottom: '-2px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            {day}요일
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 선택된 요일 약속시간 단일 편집 영역 */}
+                    {(() => {
+                      const day = adminSelectedDayTab;
+                      const scheduled = editScheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
+
+                      return (
+                        <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #ffe0b2', marginBottom: '15px' }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#e65100', marginBottom: '12px' }}>
+                            📌 [{day}요일] 약속 시간 설정
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
+                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold' }}>등원 예정:</label>
                               <input
                                 type="time"
                                 value={scheduled.in}
                                 onChange={e => setEditScheduledTimes(prev => ({
                                   ...prev,
-                                  [day]: { ...prev[day], in: e.target.value }
+                                  [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), in: e.target.value }
                                 }))}
-                                style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
                               />
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>하원:</span>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
+                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold' }}>하원 예정:</label>
                               <input
                                 type="time"
                                 value={scheduled.out}
                                 onChange={e => setEditScheduledTimes(prev => ({
                                   ...prev,
-                                  [day]: { ...prev[day], out: e.target.value }
+                                  [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), out: e.target.value }
                                 }))}
-                                style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ccc' }}
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
                               />
                             </div>
+
                             {isManaged && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ color: '#e65100', fontWeight: 'bold' }}>상담:</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1.2, minWidth: '140px' }}>
+                                <label style={{ fontSize: '12px', color: '#e65100', fontWeight: 'bold' }}>상담 예정:</label>
                                 <input
                                   type="time"
                                   value={scheduled.consult || '17:30'}
                                   onChange={e => setEditScheduledTimes(prev => ({
                                     ...prev,
-                                    [day]: { ...prev[day], consult: e.target.value }
+                                    [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), consult: e.target.value }
                                   }))}
-                                  style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ffcc80', background: '#fff8e1' }}
+                                  style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', outline: 'none' }}
                                 />
                               </div>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })()}
+
                     <button
                       onClick={handleSaveScheduledTimes}
                       style={{ width: '100%', background: '#e65100', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}
