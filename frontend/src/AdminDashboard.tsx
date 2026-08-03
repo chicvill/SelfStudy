@@ -799,6 +799,14 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                       {daysOfWeek.map(day => {
                         const isSelected = adminSelectedDayTab === day;
                         const isConfigured = !!editScheduledTimes[day];
+                        const t = editScheduledTimes[day];
+                        let hours = 0;
+                        if (t && t.in && t.out) {
+                          const [inH, inM] = t.in.split(':').map(Number);
+                          const [outH, outM] = t.out.split(':').map(Number);
+                          const diff = (outH * 60 + outM) - (inH * 60 + inM);
+                          if (diff > 0) hours = Math.round((diff / 60) * 10) / 10;
+                        }
 
                         return (
                           <button
@@ -819,7 +827,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                               transition: 'all 0.2s ease'
                             }}
                           >
-                            {day}요일 {isConfigured && '✓'}
+                            {day}({isConfigured ? `${hours}시간` : '미설정'})
                           </button>
                         );
                       })}

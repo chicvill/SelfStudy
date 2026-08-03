@@ -345,20 +345,10 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                       fontSize: '14px',
                       cursor: 'pointer',
                       marginBottom: '-2px',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
+                      transition: 'all 0.2s ease'
                     }}
                   >
-                    <span>{day}요일</span>
-                    {isConfigured ? (
-                      <span style={{ fontSize: '11px', background: isSelected ? '#fff' : '#ffe0b2', color: isSelected ? '#e65100' : '#d84315', padding: '2px 6px', borderRadius: '10px' }}>
-                        {hours}h
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '10px', opacity: 0.7 }}>(미설정)</span>
-                    )}
+                    {day}({isConfigured ? `${hours}시간` : '미설정'})
                   </button>
                 );
               })}
