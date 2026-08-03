@@ -91,6 +91,9 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
   }, [userId, sessionId]);
 
   const [selectedDayTab, setSelectedDayTab] = useState<string>('월');
+  const [workingTime, setWorkingTime] = useState<{ in: string; out: string; consult: string }>({
+    in: '09:00', out: '18:00', consult: '17:30'
+  });
 
   const calculateHours = (inTime: string, outTime: string) => {
     if (!inTime || !outTime) return 0;
@@ -100,18 +103,49 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
     return Math.max(0, Math.round((diffMins / 60) * 10) / 10);
   };
 
-  const handleTimeChange = (day: string, type: 'in' | 'out' | 'consult', val: string) => {
+  const handleSelectTab = (day: string) => {
+    setSelectedDayTab(day);
+    if (scheduledTimes[day] && activeDaysList.includes(day)) {
+      setWorkingTime(scheduledTimes[day]);
+    }
+    // If not configured, workingTime is NOT cleared, carrying over last entered time!
+  };
+
+  const handleWorkingTimeChange = (type: 'in' | 'out' | 'consult', val: string) => {
+    const updated = {
+      ...workingTime,
+      [type]: val
+    };
+    setWorkingTime(updated);
+    if (activeDaysList.includes(selectedDayTab)) {
+      setScheduledTimes(prev => ({
+        ...prev,
+        [selectedDayTab]: updated
+      }));
+    }
+  };
+
+  const handleConfirmDayTime = (day: string) => {
     setScheduledTimes(prev => ({
       ...prev,
-      [day]: {
-        ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }),
-        [type]: val
-      }
+      [day]: { ...workingTime }
     }));
+    if (!activeDaysList.includes(day)) {
+      setActiveDaysList(prev => [...prev, day]);
+    }
+  };
+
+  const handleDeleteDayTime = (day: string) => {
+    setActiveDaysList(prev => prev.filter(d => d !== day));
+    setScheduledTimes(prev => {
+      const updated = { ...prev };
+      delete updated[day];
+      return updated;
+    });
   };
 
   const handleApplyDayToAll = (sourceDay: string) => {
-    const sourceVal = scheduledTimes[sourceDay] || { in: '09:00', out: '18:00', consult: '17:30' };
+    const sourceVal = scheduledTimes[sourceDay] || workingTime;
     setScheduledTimes(prev => {
       const updated = { ...prev };
       daysOfWeek.forEach(d => {
@@ -119,6 +153,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
       });
       return updated;
     });
+    setActiveDaysList([...daysOfWeek]);
     alert(`[${sourceDay}요일] 시간 설정이 모든 요일에 동일하게 적용되었습니다.`);
   };
 
@@ -283,29 +318,29 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
           {/* 학습 요일 선택 & 요일별 시간 탭 입력 */}
           <div style={{ marginBottom: '25px' }}>
             <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: '#555' }}>
-              🗓️ 요일별 학습 시간 설정 (탭 선택)
+              🗓️ 요일별 학습 시간 설정 (월~일 탭 선택)
             </label>
             
-            {/* 요일 선택 탭 바 */}
+            {/* 요일 선택 탭 바 (설정 시 주황색 테마) */}
             <div style={{ display: 'flex', borderBottom: '2px solid #ffe0b2', gap: '4px', flexWrap: 'wrap' }}>
               {daysOfWeek.map(day => {
                 const isSelected = selectedDayTab === day;
-                const isActiveDay = activeDaysList.includes(day);
-                const timeObj = scheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
-                const hours = isActiveDay ? calculateHours(timeObj.in, timeObj.out) : 0;
+                const isConfigured = activeDaysList.includes(day) && !!scheduledTimes[day];
+                const timeObj = scheduledTimes[day] || workingTime;
+                const hours = isConfigured ? calculateHours(timeObj.in, timeObj.out) : 0;
 
                 return (
                   <button
                     type="button"
                     key={day}
-                    onClick={() => setSelectedDayTab(day)}
+                    onClick={() => handleSelectTab(day)}
                     style={{
                       padding: '10px 16px',
                       borderRadius: '10px 10px 0 0',
-                      border: isSelected ? '2px solid #ff9800' : '1px solid #ddd',
+                      border: isSelected ? '2px solid #e65100' : (isConfigured ? '2px solid #ff9800' : '1px solid #ddd'),
                       borderBottom: isSelected ? '2px solid #fff' : '1px solid #ddd',
-                      background: isSelected ? '#ff9800' : (isActiveDay ? '#fff3e0' : '#f5f5f5'),
-                      color: isSelected ? '#fff' : (isActiveDay ? '#e65100' : '#777'),
+                      background: isConfigured ? (isSelected ? '#e65100' : '#ff9800') : (isSelected ? '#fff3e0' : '#f5f5f5'),
+                      color: isConfigured ? '#fff' : (isSelected ? '#e65100' : '#777'),
                       fontWeight: 'bold',
                       fontSize: '14px',
                       cursor: 'pointer',
@@ -317,96 +352,122 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                     }}
                   >
                     <span>{day}요일</span>
-                    {isActiveDay ? (
+                    {isConfigured ? (
                       <span style={{ fontSize: '11px', background: isSelected ? '#fff' : '#ffe0b2', color: isSelected ? '#e65100' : '#d84315', padding: '2px 6px', borderRadius: '10px' }}>
                         {hours}h
                       </span>
                     ) : (
-                      <span style={{ fontSize: '10px', opacity: 0.7 }}>(휴무)</span>
+                      <span style={{ fontSize: '10px', opacity: 0.7 }}>(미설정)</span>
                     )}
                   </button>
                 );
               })}
             </div>
 
-            {/* 선택된 요일 단일 입력 카드 */}
+            {/* 선택된 요일 단일 입력 카드 (시간 입력창 + 삭제 + 확인 같은 라인) */}
             {(() => {
               const day = selectedDayTab;
-              const isActiveDay = activeDaysList.includes(day);
-              const timeObj = scheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
-              const duration = isActiveDay ? calculateHours(timeObj.in, timeObj.out) : 0;
+              const isConfigured = activeDaysList.includes(day) && !!scheduledTimes[day];
+              const duration = calculateHours(workingTime.in, workingTime.out);
 
               return (
                 <div style={{ background: '#fff', padding: '20px', borderRadius: '0 0 15px 15px', border: '2px solid #ffe0b2', borderTop: 'none', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>
-                        <input
-                          type="checkbox"
-                          checked={isActiveDay}
-                          onChange={() => handleToggleDay(day)}
-                          style={{ width: '18px', height: '18px', accentColor: '#ff9800' }}
-                        />
-                        📌 {day}요일을 학습 가능 요일로 설정
-                      </label>
+                    <div style={{ fontWeight: 'bold', fontSize: '15px', color: isConfigured ? '#e65100' : '#333', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📌 [{day}요일] 학습 시간 설정</span>
+                      {isConfigured ? (
+                        <span style={{ fontSize: '12px', background: '#ffe0b2', color: '#e65100', padding: '3px 8px', borderRadius: '6px' }}>
+                          설정완료 ({duration}시간)
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '12px', background: '#eee', color: '#666', padding: '3px 8px', borderRadius: '6px' }}>
+                          미설정 (확인을 누르면 이전 입력시간이 저장됩니다)
+                        </span>
+                      )}
                     </div>
 
-                    {isActiveDay && (
-                      <span style={{ fontSize: '13px', background: '#ffe0b2', color: '#e65100', padding: '4px 10px', borderRadius: '8px', fontWeight: 'bold' }}>
-                        {day}요일 학습시간: {duration}시간
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleApplyDayToAll(day)}
+                      style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                    >
+                      📋 {day}요일 시간표 전체 요일에 적용
+                    </button>
                   </div>
 
-                  {isActiveDay ? (
-                    <>
-                      <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '150px' }}>
-                          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>⏰ 입실(등원) 예정 시각</label>
-                          <input 
-                            type="time" 
-                            value={timeObj.in} 
-                            onChange={e => handleTimeChange(day, 'in', e.target.value)}
-                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', width: '100%', fontSize: '14px' }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '150px' }}>
-                          <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555' }}>🚪 퇴실(하원) 예정 시각</label>
-                          <input 
-                            type="time" 
-                            value={timeObj.out} 
-                            onChange={e => handleTimeChange(day, 'out', e.target.value)}
-                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', width: '100%', fontSize: '14px' }}
-                          />
-                        </div>
-                        {managementType === '관리형' && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1.2, minWidth: '180px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#e65100' }}>💬 상담 예정 시각 (관리형)</label>
-                            <input 
-                              type="time" 
-                              value={timeObj.consult || '17:30'} 
-                              onChange={e => handleTimeChange(day, 'consult', e.target.value)}
-                              style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', width: '100%', background: '#fff8e1', fontSize: '14px' }}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleApplyDayToAll(day)}
-                          style={{ background: '#fff3e0', border: '1px solid #ffb74d', color: '#e65100', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                        >
-                          📋 {day}요일 설정 시간을 모든 요일에 동일 적용
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#888', background: '#fafafa', borderRadius: '8px', fontSize: '13px' }}>
-                      {day}요일은 휴무(자율 휴식일)로 지정되어 있습니다. 위 체크박스를 선택하여 학습 요일로 지정할 수 있습니다.
+                  {/* 등원, 하원, 상담 입력창과 삭제, 확인 버튼 한 라인 배치 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: '#fafafa', padding: '15px', borderRadius: '10px', border: '1px solid #eee' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>⏰ 등원:</label>
+                      <input 
+                        type="time" 
+                        value={workingTime.in} 
+                        onChange={e => handleWorkingTimeChange('in', e.target.value)}
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
+                      />
                     </div>
-                  )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>🚪 하원:</label>
+                      <input 
+                        type="time" 
+                        value={workingTime.out} 
+                        onChange={e => handleWorkingTimeChange('out', e.target.value)}
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
+                      />
+                    </div>
+
+                    {managementType === '관리형' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#e65100', whiteSpace: 'nowrap' }}>💬 상담:</label>
+                        <input 
+                          type="time" 
+                          value={workingTime.consult || '17:30'} 
+                          onChange={e => handleWorkingTimeChange('consult', e.target.value)}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px' }}
+                        />
+                      </div>
+                    )}
+
+                    {/* 등/하원 창과 같은 라인에 위치한 확인 & 삭제 버튼 */}
+                    <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmDayTime(day)}
+                        style={{
+                          background: '#ff9800',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '8px 18px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '13px',
+                          boxShadow: '0 2px 6px rgba(255, 152, 0, 0.3)',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        ✅ 확인
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDayTime(day)}
+                        style={{
+                          background: '#fff',
+                          color: '#d32f2f',
+                          border: '1px solid #ef9a9a',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '13px',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        🗑️ 삭제
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })()}

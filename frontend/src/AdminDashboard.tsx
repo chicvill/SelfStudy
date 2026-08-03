@@ -36,6 +36,50 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
   const [adminSelectedDayTab, setAdminSelectedDayTab] = useState<string>('월');
+  const [adminWorkingTime, setAdminWorkingTime] = useState<{ in: string; out: string; consult: string }>({
+    in: '09:00', out: '18:00', consult: '17:30'
+  });
+
+  const handleAdminSelectTab = (day: string) => {
+    setAdminSelectedDayTab(day);
+    if (editScheduledTimes[day]) {
+      setAdminWorkingTime({
+        in: editScheduledTimes[day].in || '09:00',
+        out: editScheduledTimes[day].out || '18:00',
+        consult: editScheduledTimes[day].consult || '17:30'
+      });
+    }
+    // If day is not configured yet, carry over current adminWorkingTime!
+  };
+
+  const handleAdminWorkingTimeChange = (type: 'in' | 'out' | 'consult', val: string) => {
+    const updated = {
+      ...adminWorkingTime,
+      [type]: val
+    };
+    setAdminWorkingTime(updated);
+    if (editScheduledTimes[adminSelectedDayTab]) {
+      setEditScheduledTimes(prev => ({
+        ...prev,
+        [adminSelectedDayTab]: updated
+      }));
+    }
+  };
+
+  const handleAdminConfirmDayTime = (day: string) => {
+    setEditScheduledTimes(prev => ({
+      ...prev,
+      [day]: { ...adminWorkingTime }
+    }));
+  };
+
+  const handleAdminDeleteDayTime = (day: string) => {
+    setEditScheduledTimes(prev => {
+      const updated = { ...prev };
+      delete updated[day];
+      return updated;
+    });
+  };
 
   // Admin Real-time Emergency Alerts State
   const [adminAlerts, setAdminAlerts] = useState<{ late_students: any[]; recent_messages: any[] }>({
@@ -750,22 +794,24 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
 
                 {isScheduleExpanded && (
                   <div style={{ marginTop: '20px' }}>
-                    {/* 요일 선택 탭 바 */}
+                    {/* 요일 선택 탭 바 (설정된 요일 주황색 표시) */}
                     <div style={{ display: 'flex', borderBottom: '2px solid #ffe0b2', gap: '4px', marginBottom: '15px', flexWrap: 'wrap' }}>
                       {daysOfWeek.map(day => {
                         const isSelected = adminSelectedDayTab === day;
+                        const isConfigured = !!editScheduledTimes[day];
+
                         return (
                           <button
                             type="button"
                             key={day}
-                            onClick={() => setAdminSelectedDayTab(day)}
+                            onClick={() => handleAdminSelectTab(day)}
                             style={{
                               padding: '8px 14px',
                               borderRadius: '8px 8px 0 0',
-                              border: isSelected ? '2px solid #e65100' : '1px solid #ccc',
+                              border: isSelected ? '2px solid #e65100' : (isConfigured ? '2px solid #ff9800' : '1px solid #ccc'),
                               borderBottom: isSelected ? '2px solid #fff' : '1px solid #ccc',
-                              background: isSelected ? '#e65100' : '#fff',
-                              color: isSelected ? '#fff' : '#444',
+                              background: isConfigured ? (isSelected ? '#e65100' : '#ff9800') : (isSelected ? '#fff3e0' : '#fff'),
+                              color: isConfigured ? '#fff' : (isSelected ? '#e65100' : '#444'),
                               fontWeight: 'bold',
                               fontSize: '13px',
                               cursor: 'pointer',
@@ -773,64 +819,98 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                               transition: 'all 0.2s ease'
                             }}
                           >
-                            {day}요일
+                            {day}요일 {isConfigured && '✓'}
                           </button>
                         );
                       })}
                     </div>
 
-                    {/* 선택된 요일 약속시간 단일 편집 영역 */}
+                    {/* 선택된 요일 약속시간 단일 편집 영역 (입력창 + 확인 + 삭제 한 라인) */}
                     {(() => {
                       const day = adminSelectedDayTab;
-                      const scheduled = editScheduledTimes[day] || { in: '09:00', out: '18:00', consult: '17:30' };
+                      const isConfigured = !!editScheduledTimes[day];
 
                       return (
                         <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #ffe0b2', marginBottom: '15px' }}>
-                          <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#e65100', marginBottom: '12px' }}>
-                            📌 [{day}요일] 약속 시간 설정
+                          <div style={{ fontWeight: 'bold', fontSize: '14px', color: isConfigured ? '#e65100' : '#333', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>📌 [{day}요일] 약속 시간 설정</span>
+                            {isConfigured ? (
+                              <span style={{ fontSize: '11px', background: '#ffe0b2', color: '#e65100', padding: '2px 6px', borderRadius: '4px' }}>설정완료</span>
+                            ) : (
+                              <span style={{ fontSize: '11px', background: '#eee', color: '#666', padding: '2px 6px', borderRadius: '4px' }}>미설정 (확인 클릭 시 이전 입력시간 저장)</span>
+                            )}
                           </div>
 
-                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
-                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold' }}>등원 예정:</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#fafafa', padding: '12px', borderRadius: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>등원:</label>
                               <input
                                 type="time"
-                                value={scheduled.in}
-                                onChange={e => setEditScheduledTimes(prev => ({
-                                  ...prev,
-                                  [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), in: e.target.value }
-                                }))}
+                                value={adminWorkingTime.in}
+                                onChange={e => handleAdminWorkingTimeChange('in', e.target.value)}
                                 style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
                               />
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '120px' }}>
-                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold' }}>하원 예정:</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>하원:</label>
                               <input
                                 type="time"
-                                value={scheduled.out}
-                                onChange={e => setEditScheduledTimes(prev => ({
-                                  ...prev,
-                                  [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), out: e.target.value }
-                                }))}
+                                value={adminWorkingTime.out}
+                                onChange={e => handleAdminWorkingTimeChange('out', e.target.value)}
                                 style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
                               />
                             </div>
 
                             {isManaged && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1.2, minWidth: '140px' }}>
-                                <label style={{ fontSize: '12px', color: '#e65100', fontWeight: 'bold' }}>상담 예정:</label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <label style={{ fontSize: '12px', color: '#e65100', fontWeight: 'bold', whiteSpace: 'nowrap' }}>상담:</label>
                                 <input
                                   type="time"
-                                  value={scheduled.consult || '17:30'}
-                                  onChange={e => setEditScheduledTimes(prev => ({
-                                    ...prev,
-                                    [day]: { ...(prev[day] || { in: '09:00', out: '18:00', consult: '17:30' }), consult: e.target.value }
-                                  }))}
+                                  value={adminWorkingTime.consult || '17:30'}
+                                  onChange={e => handleAdminWorkingTimeChange('consult', e.target.value)}
                                   style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', outline: 'none' }}
                                 />
                               </div>
                             )}
+
+                            {/* 동일 라인 확인 & 삭제 버튼 */}
+                            <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleAdminConfirmDayTime(day)}
+                                style={{
+                                  background: '#ff9800',
+                                  color: '#fff',
+                                  border: 'none',
+                                  padding: '6px 14px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  fontSize: '12px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                ✅ 확인
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAdminDeleteDayTime(day)}
+                                style={{
+                                  background: '#fff',
+                                  color: '#d32f2f',
+                                  border: '1px solid #ef9a9a',
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  fontSize: '12px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                🗑️ 삭제
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
