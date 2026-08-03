@@ -150,17 +150,6 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
     }
   };
 
-  const fetchMessages = async (studentId: string) => {
-    try {
-      const res = await axios.get(`${API_URL}/knowledge/messages/${studentId}`);
-      if (res.data.status === 'success') {
-        setMessages(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const fetchStudentSchedule = async (studentId: string) => {
     try {
       const resp = await axios.get(`${API_URL}/knowledge/student/${studentId}`);
@@ -255,22 +244,6 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
     } catch (err) {
       console.error(err);
       alert("등하원 예약 시간 저장 실패");
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!newMsg.trim() || !selectedStudent) return;
-    try {
-      await axios.post(`${API_URL}/knowledge/messages`, {
-        session_id: selectedStudent,
-        sender_role: 'admin',
-        content: newMsg.trim()
-      });
-      setNewMsg('');
-      fetchMessages(selectedStudent);
-    } catch (err) {
-      console.error(err);
-      alert("메시지 전송 실패");
     }
   };
 
