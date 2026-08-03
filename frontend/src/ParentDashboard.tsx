@@ -14,10 +14,6 @@ export default function ParentDashboard() {
   const [managementType, setManagementType] = useState<string>('자율형');
   const [voucherExpiry, setVoucherExpiry] = useState<string>('');
 
-  // 3-way messaging
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMsg, setNewMsg] = useState('');
-
   const doFetchObserverCode = async (code: string) => {
     if (!code.trim()) return;
     const cleanCode = code.trim();
@@ -25,7 +21,6 @@ export default function ParentDashboard() {
     setLoading(true);
     setErrorMsg("");
     setScheduleData(null);
-    setMessages([]);
     try {
       const resp = await axios.get(`${API_URL}/knowledge/observe/${cleanCode}`);
       setScheduleData(resp.data.data);
@@ -69,63 +64,8 @@ export default function ParentDashboard() {
         setManagementType(profResp.data.data['관리방식'] || '자율형');
         setVoucherExpiry(profResp.data.data['이용권만료일'] || '');
       }
-      const msgsResp = await axios.get(`${API_URL}/knowledge/messages/${sessId}`);
-      if (msgsResp.data.status === 'success') {
-        setMessages(msgsResp.data.data);
-      }
     } catch (e) {
       console.error("Failed to fetch child data", e);
-    }
-  };
-
-  const sendEncouragementCard = async (text: string) => {
-    const sessId = scheduleData?.payload?.session_id;
-    if (!sessId) return;
-    try {
-      await axios.post(`${API_URL}/knowledge/messages/${sessId}`, {
-        sender_role: 'parent',
-        content: text
-      });
-      const msgsResp = await axios.get(`${API_URL}/knowledge/messages/${sessId}`);
-      if (msgsResp.data.status === 'success') {
-        setMessages(msgsResp.data.data);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Poll messages every 5 seconds if scheduleData is loaded
-  useEffect(() => {
-    if (scheduleData?.payload?.session_id) {
-      const sessId = scheduleData.payload.session_id;
-      const timer = setInterval(() => {
-        axios.get(`${API_URL}/knowledge/messages/${sessId}`)
-          .then(res => {
-            if (res.data.status === 'success') {
-              setMessages(res.data.data);
-            }
-          })
-          .catch(e => console.error(e));
-      }, 5000);
-      return () => clearInterval(timer);
-    }
-  }, [scheduleData]);
-
-  const handleSendMessage = async () => {
-    if (!newMsg.trim() || !scheduleData) return;
-    const sessId = scheduleData.payload.session_id;
-    try {
-      await axios.post(`${API_URL}/knowledge/messages`, {
-        session_id: sessId,
-        sender_role: 'parent',
-        content: newMsg.trim()
-      });
-      setNewMsg('');
-      fetchChildData(sessId);
-    } catch (err) {
-      console.error(err);
-      alert("메시지 전송 실패");
     }
   };
 

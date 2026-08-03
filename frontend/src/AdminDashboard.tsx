@@ -36,34 +36,15 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
 
-  // 3-way messaging
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMsg, setNewMsg] = useState('');
-
   // Admin Real-time Emergency Alerts State
   const [adminAlerts, setAdminAlerts] = useState<{ late_students: any[]; recent_messages: any[] }>({
     late_students: [],
     recent_messages: []
   });
 
-  // High risk students state
-  const [riskStudents, setRiskStudents] = useState<any[]>([]);
-
   useEffect(() => {
     fetchStudents();
-    fetchRiskStudents();
   }, []);
-
-  const fetchRiskStudents = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/knowledge/admin_risk_students`);
-      if (res.data.status === 'success') {
-        setRiskStudents(res.data.data || []);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   // Poll real-time admin alerts every 3 seconds
   useEffect(() => {

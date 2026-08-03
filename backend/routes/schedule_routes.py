@@ -86,7 +86,8 @@ async def process_chat(payload: ChatPayload, background_tasks: BackgroundTasks):
     
     val_stage = session.get("current_stage")
     current_stage = int(val_stage) if isinstance(val_stage, (int, str)) else 1
-    chat_history = list(session.get("chat_history") or [])
+    val_history = session.get("chat_history")
+    chat_history = list(val_history) if isinstance(val_history, list) else []
     collected_data = dict(session.get("collected_data") or {})
     draft_schedule = dict(session.get("draft_schedule") or {})
 
@@ -277,7 +278,7 @@ async def reschedule_auto(payload: RescheduleAutoPayload):
     old_schedule = active_doc.get("payload", {})
     form_data = context.user_repo.get_user_profile(payload.session_id) or {}
     
-    new_schedule = context.scheduler.reschedule_uncompleted(old_schedule, form_data)
+    new_schedule = context.scheduler.reschedule_auto(form_data, old_schedule)
     
     active_doc["payload"]["status"] = "superseded"
     context.knowledge_repo.insert_knowledge(

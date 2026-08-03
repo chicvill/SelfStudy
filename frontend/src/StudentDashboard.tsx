@@ -36,41 +36,16 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   const [attendance, setAttendance] = useState<any[]>([]);
   const [managementType, setManagementType] = useState<string>('자율형');
   const [scheduledTimes, setScheduledTimes] = useState<any>({});
+  const [voucherExpiry, setVoucherExpiry] = useState<string>('');
+
   // 1줄 요약 및 완료 인증 모달 상태
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState<{weekNum: number, taskIdx: number, task: any} | null>(null);
-  const [oneLineSummary, setOneLineSummary] = useState('');
-  const [actualMinsInput, setActualMinsInput] = useState<number>(30);
-  const [verifying, setVerifying] = useState(false);
 
   const handleOpenVerifyModal = (weekNum: number, taskIdx: number, task: any) => {
     setVerifyTarget({ weekNum, taskIdx, task });
-    setOneLineSummary('');
-    setActualMinsInput(task.estimated_minutes || 30);
     setShowVerifyModal(true);
   };
-
-  const handleConfirmVerifyTask = async () => {
-    if (!verifyTarget) return;
-    setVerifying(true);
-    try {
-      await axios.post(`${API_URL}/knowledge/task_verify`, {
-        session_id: sessionId,
-        task_title: verifyTarget.task.task_title || verifyTarget.task.unit_name,
-        one_line_summary: oneLineSummary.trim(),
-        actual_minutes: Number(actualMinsInput) || 30
-      });
-      await toggleTask(verifyTarget.weekNum, verifyTarget.taskIdx, true);
-    } catch (e) {
-      console.error("Verification error", e);
-    }
-    setVerifying(false);
-    setShowVerifyModal(false);
-  };
-
-  // 3-way messaging
-  const [messagesList, setMessagesList] = useState<any[]>([]);
-  const [newMsg, setNewMsg] = useState('');
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -115,25 +90,11 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
     }
   };
 
-  const fetchMessagesList = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/knowledge/messages/${sessionId}`);
-      if (res.data.status === 'success') {
-        setMessagesList(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
     if (sessionId) {
       fetchSchedule();
       fetchAttendance();
       fetchProfile();
-      fetchMessagesList();
-      const timer = setInterval(fetchMessagesList, 5000);
-      return () => clearInterval(timer);
     }
   }, [sessionId]);
 
