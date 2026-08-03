@@ -338,7 +338,6 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                   onClick={() => {
                     if (st.session_id) {
                       setSelectedStudent(st.session_id);
-                      fetchStudentDetails(st.session_id);
                     }
                   }}
                   style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
