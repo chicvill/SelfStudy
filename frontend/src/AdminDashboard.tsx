@@ -841,6 +841,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
 
                     {/* 선택된 요일 약속시간 단일 편집 영역 (입력창 + 확인 + 삭제 한 라인) */}
                     {(() => {
+                      const day = adminSelectedDayTab;
                       return (
                         <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #ffe0b2', marginBottom: '15px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#fafafa', padding: '12px', borderRadius: '8px' }}>

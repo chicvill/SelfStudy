@@ -169,19 +169,6 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
     });
   };
 
-  const handleApplyDayToAll = (sourceDay: string) => {
-    const sourceVal = scheduledTimes[sourceDay] || workingTime;
-    setScheduledTimes(prev => {
-      const updated = { ...prev };
-      daysOfWeek.forEach(d => {
-        updated[d] = { ...sourceVal };
-      });
-      return updated;
-    });
-    setActiveDaysList([...daysOfWeek]);
-    alert(`[${sourceDay}요일] 시간 설정이 모든 요일에 동일하게 적용되었습니다.`);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
