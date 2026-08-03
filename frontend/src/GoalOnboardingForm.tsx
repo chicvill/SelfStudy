@@ -331,8 +331,8 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
               {daysOfWeek.map(day => {
                 const isSelected = selectedDayTab === day;
                 const isConfigured = activeDaysList.includes(day) && !!scheduledTimes[day];
-                const timeObj = scheduledTimes[day] || workingTime;
-                const hours = isConfigured ? calculateHours(timeObj.in, timeObj.out) : 0;
+                const timeObj = isSelected ? workingTime : (scheduledTimes[day] || workingTime);
+                const hours = (isConfigured || isSelected) ? calculateHours(timeObj.in, timeObj.out) : 0;
 
                 return (
                   <button

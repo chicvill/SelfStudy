@@ -799,7 +799,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                       {daysOfWeek.map(day => {
                         const isSelected = adminSelectedDayTab === day;
                         const isConfigured = !!editScheduledTimes[day];
-                        const t = editScheduledTimes[day];
+                        const t = isSelected ? adminWorkingTime : editScheduledTimes[day];
                         let hours = 0;
                         if (t && t.in && t.out) {
                           const [inH, inM] = t.in.split(':').map(Number);
