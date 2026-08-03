@@ -35,7 +35,16 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [voucherExpiry, setVoucherExpiry] = useState('');
   const [editScheduledTimes, setEditScheduledTimes] = useState<Record<string, { in: string; out: string; consult?: string }>>({});
   const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
-  const [adminSelectedDayTab, setAdminSelectedDayTab] = useState<string>('월');
+  const TIME_OPTIONS_24H = React.useMemo(() => {
+    const options: string[] = [];
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 10) {
+        options.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+    options.push('24:00');
+    return options;
+  }, []);
   const [adminWorkingTime, setAdminWorkingTime] = useState<{ in: string; out: string; consult: string }>({
     in: '09:00', out: '18:00', consult: '17:30'
   });
@@ -802,9 +811,10 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                         const t = isSelected ? adminWorkingTime : editScheduledTimes[day];
                         let hours = 0;
                         if (t && t.in && t.out) {
-                          const [inH, inM] = t.in.split(':').map(Number);
-                          const [outH, outM] = t.out.split(':').map(Number);
+                          let [inH, inM] = t.in.split(':').map(Number);
+                          let [outH, outM] = t.out.split(':').map(Number);
                           if (!isNaN(inH) && !isNaN(inM) && !isNaN(outH) && !isNaN(outM)) {
+                            if (inH >= 18 && outH === 12) outH = 24;
                             let inMins = inH * 60 + inM;
                             let outMins = outH * 60 + outM;
                             if (inMins !== outMins) {
@@ -847,36 +857,42 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#fafafa', padding: '12px', borderRadius: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>등원:</label>
-                              <input
-                                type="time"
-                                step="600"
+                              <select
                                 value={adminWorkingTime.in}
                                 onChange={e => handleAdminWorkingTimeChange('in', e.target.value)}
-                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
-                              />
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', background: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                              >
+                                {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>하원:</label>
-                              <input
-                                type="time"
-                                step="600"
+                              <select
                                 value={adminWorkingTime.out}
                                 onChange={e => handleAdminWorkingTimeChange('out', e.target.value)}
-                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
-                              />
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', background: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                              >
+                                {TIME_OPTIONS_24H.map(t => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
                             </div>
 
                             {isManaged && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <label style={{ fontSize: '12px', color: '#e65100', fontWeight: 'bold', whiteSpace: 'nowrap' }}>상담:</label>
-                                <input
-                                  type="time"
-                                  step="600"
+                                <select
                                   value={adminWorkingTime.consult || '17:30'}
                                   onChange={e => handleAdminWorkingTimeChange('consult', e.target.value)}
-                                  style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', outline: 'none' }}
-                                />
+                                  style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', outline: 'none', fontWeight: 'bold', color: '#e65100', cursor: 'pointer' }}
+                                >
+                                  {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
                               </div>
                             )}
 

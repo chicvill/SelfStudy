@@ -42,6 +42,17 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
 
   const daysOfWeek = ['월', '화', '수', '목', '금', '토', '일'];
 
+  const TIME_OPTIONS_24H = React.useMemo(() => {
+    const options: string[] = [];
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 10) {
+        options.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+    options.push('24:00');
+    return options;
+  }, []);
+
   useEffect(() => {
     // Fetch user profile on mount
     axios.get(`${API_URL}/knowledge/profile/${userId}`)
@@ -110,16 +121,21 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
 
   const calculateHours = (inTime: string, outTime: string) => {
     if (!inTime || !outTime) return 0;
-    const [inH, inM] = inTime.split(':').map(Number);
-    const [outH, outM] = outTime.split(':').map(Number);
+    let [inH, inM] = inTime.split(':').map(Number);
+    let [outH, outM] = outTime.split(':').map(Number);
     if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0;
+
+    // Disambiguate 12:00 PM vs Midnight for evening study (e.g., 22:00 ~ 12:00 -> treat 12:00 as midnight 24:00)
+    if (inH >= 18 && outH === 12) {
+      outH = 24;
+    }
 
     let inMins = inH * 60 + inM;
     let outMins = outH * 60 + outM;
 
     if (inMins === outMins) return 0;
 
-    // Handle overnight/midnight schedules (e.g., 23:00 ~ 00:00 = 1시간)
+    // Handle overnight/midnight schedules (e.g., 22:00 ~ 01:00 = 3시간)
     if (outMins < inMins) {
       outMins += 24 * 60;
     }
@@ -370,36 +386,42 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: '#fafafa', padding: '15px', borderRadius: '10px', border: '1px solid #eee' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>⏰ 등원:</label>
-                      <input 
-                        type="time" 
-                        step="600"
+                      <select 
                         value={workingTime.in} 
                         onChange={e => handleWorkingTimeChange('in', e.target.value)}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
-                      />
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>🚪 하원:</label>
-                      <input 
-                        type="time" 
-                        step="600"
+                      <select 
                         value={workingTime.out} 
                         onChange={e => handleWorkingTimeChange('out', e.target.value)}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
-                      />
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        {TIME_OPTIONS_24H.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {managementType === '관리형' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#e65100', whiteSpace: 'nowrap' }}>💬 상담:</label>
-                        <input 
-                          type="time" 
-                          step="600"
+                        <select 
                           value={workingTime.consult || '17:30'} 
                           onChange={e => handleWorkingTimeChange('consult', e.target.value)}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px' }}
-                        />
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px', fontWeight: 'bold', color: '#e65100', cursor: 'pointer' }}
+                        >
+                          {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
                       </div>
                     )}
 
