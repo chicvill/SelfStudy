@@ -157,14 +157,6 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
     alert(`[${sourceDay}요일] 시간 설정이 모든 요일에 동일하게 적용되었습니다.`);
   };
 
-  const handleToggleDay = (day: string) => {
-    if (activeDaysList.includes(day)) {
-      setActiveDaysList(prev => prev.filter(d => d !== day));
-    } else {
-      setActiveDaysList(prev => [...prev, day]);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
