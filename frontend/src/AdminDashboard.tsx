@@ -804,8 +804,14 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                         if (t && t.in && t.out) {
                           const [inH, inM] = t.in.split(':').map(Number);
                           const [outH, outM] = t.out.split(':').map(Number);
-                          const diff = (outH * 60 + outM) - (inH * 60 + inM);
-                          if (diff > 0) hours = Math.round((diff / 60) * 10) / 10;
+                          if (!isNaN(inH) && !isNaN(inM) && !isNaN(outH) && !isNaN(outM)) {
+                            let inMins = inH * 60 + inM;
+                            let outMins = outH * 60 + outM;
+                            if (inMins !== outMins) {
+                              if (outMins < inMins) outMins += 24 * 60;
+                              hours = Math.round(((outMins - inMins) / 60) * 10) / 10;
+                            }
+                          }
                         }
 
                         return (
@@ -827,7 +833,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                               transition: 'all 0.2s ease'
                             }}
                           >
-                            {day}({isConfigured ? `${hours}시간` : '미설정'})
+                            {day}({(isConfigured || isSelected) ? `${hours}시간` : '미설정'})
                           </button>
                         );
                       })}
@@ -842,6 +848,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                               <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>등원:</label>
                               <input
                                 type="time"
+                                step="600"
                                 value={adminWorkingTime.in}
                                 onChange={e => handleAdminWorkingTimeChange('in', e.target.value)}
                                 style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
@@ -852,6 +859,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                               <label style={{ fontSize: '12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>하원:</label>
                               <input
                                 type="time"
+                                step="600"
                                 value={adminWorkingTime.out}
                                 onChange={e => handleAdminWorkingTimeChange('out', e.target.value)}
                                 style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none' }}
@@ -863,6 +871,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
                                 <label style={{ fontSize: '12px', color: '#e65100', fontWeight: 'bold', whiteSpace: 'nowrap' }}>상담:</label>
                                 <input
                                   type="time"
+                                  step="600"
                                   value={adminWorkingTime.consult || '17:30'}
                                   onChange={e => handleAdminWorkingTimeChange('consult', e.target.value)}
                                   style={{ padding: '6px', borderRadius: '6px', border: '1px solid #ffcc80', background: '#fff8e1', outline: 'none' }}

@@ -112,8 +112,20 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
     if (!inTime || !outTime) return 0;
     const [inH, inM] = inTime.split(':').map(Number);
     const [outH, outM] = outTime.split(':').map(Number);
-    const diffMins = (outH * 60 + outM) - (inH * 60 + inM);
-    return Math.max(0, Math.round((diffMins / 60) * 10) / 10);
+    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0;
+
+    let inMins = inH * 60 + inM;
+    let outMins = outH * 60 + outM;
+
+    if (inMins === outMins) return 0;
+
+    // Handle overnight/midnight schedules (e.g., 23:00 ~ 00:00 = 1시간)
+    if (outMins < inMins) {
+      outMins += 24 * 60;
+    }
+
+    const diffMins = outMins - inMins;
+    return Math.round((diffMins / 60) * 10) / 10;
   };
 
   const handleSelectTab = (day: string) => {
@@ -373,6 +385,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                       <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>⏰ 등원:</label>
                       <input 
                         type="time" 
+                        step="600"
                         value={workingTime.in} 
                         onChange={e => handleWorkingTimeChange('in', e.target.value)}
                         style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
@@ -383,6 +396,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                       <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#555', whiteSpace: 'nowrap' }}>🚪 하원:</label>
                       <input 
                         type="time" 
+                        step="600"
                         value={workingTime.out} 
                         onChange={e => handleWorkingTimeChange('out', e.target.value)}
                         style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px' }}
@@ -394,6 +408,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                         <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#e65100', whiteSpace: 'nowrap' }}>💬 상담:</label>
                         <input 
                           type="time" 
+                          step="600"
                           value={workingTime.consult || '17:30'} 
                           onChange={e => handleWorkingTimeChange('consult', e.target.value)}
                           style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px' }}
