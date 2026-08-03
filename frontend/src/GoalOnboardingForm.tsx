@@ -64,14 +64,27 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
             setScheduledTimes(prev => {
               const merged = { ...prev };
               Object.keys(profile['등하원예약시간']).forEach(d => {
+                const inT = profile['등하원예약시간'][d].in || '09:00';
+                let outT = profile['등하원예약시간'][d].out || '18:00';
+                if (outT === inT) outT = '18:00';
                 merged[d] = {
-                  in: profile['등하원예약시간'][d].in || '09:00',
-                  out: profile['등하원예약시간'][d].out || '18:00',
+                  in: inT,
+                  out: outT,
                   consult: profile['등하원예약시간'][d].consult || '17:30'
                 };
               });
               return merged;
             });
+            if (profile['등하원예약시간']['월']) {
+              const inT = profile['등하원예약시간']['월'].in || '09:00';
+              let outT = profile['등하원예약시간']['월'].out || '18:00';
+              if (outT === inT) outT = '18:00';
+              setWorkingTime({
+                in: inT,
+                out: outT,
+                consult: profile['등하원예약시간']['월'].consult || '17:30'
+              });
+            }
           }
         }
       })
