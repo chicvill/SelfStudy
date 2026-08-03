@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { API_URL } from './config';
+import ThreeWayChat from './components/ThreeWayChat';
+import TaskVerificationModal from './components/TaskVerificationModal';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -611,82 +613,7 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
         </div>
 
         {/* Right: 3자 실시간 메시지 창 */}
-        <div style={{
-          flex: '1 1 320px',
-          minWidth: '280px',
-          minHeight: '300px',
-          background: managementType === '관리형' ? '#f1f8e9' : '#f9f9f9',
-          border: `1px solid ${managementType === '관리형' ? '#c5e1a5' : '#e0e0e0'}`,
-          borderRadius: '12px',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <div style={{ background: managementType === '관리형' ? '#33691e' : '#616161', padding: '15px 20px', borderRadius: '12px 12px 0 0', color: '#fff', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>💬 3자 실시간 메시지 창 (관리자/학부모 소통)</span>
-          </div>
-
-          {managementType === '관리형' ? (
-            <>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9fbe7' }}>
-                {messagesList.map(m => {
-                  const isSelf = m.sender_role === 'student';
-                  let roleLabel = '이용자(학생)';
-                  if (m.sender_role === 'admin') roleLabel = '관리자';
-                  if (m.sender_role === 'parent') roleLabel = '학부모';
-
-                  return (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}>
-                      <div style={{
-                        maxWidth: '85%', padding: '10px 14px', borderRadius: '12px',
-                        background: isSelf ? '#33691e' : '#fff',
-                        color: isSelf ? '#fff' : '#333',
-                        border: '1px solid #dcdde1',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                        fontSize: '13px'
-                      }}>
-                        <div style={{ fontSize: '10px', color: isSelf ? '#c5e1a5' : '#888', marginBottom: '4px', fontWeight: 'bold' }}>
-                          {roleLabel}
-                        </div>
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {messagesList.length === 0 && (
-                  <div style={{ color: '#999', textAlign: 'center', marginTop: '100px', fontSize: '13px' }}>대화 내역이 없습니다.</div>
-                )}
-              </div>
-
-              <div style={{ padding: '10px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', gap: '10px' }}>
-                <input
-                  type="text"
-                  value={newMsg}
-                  onChange={e => setNewMsg(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="관리자/학부모와 공유할 내용을 입력하세요..."
-                  style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' }}
-                />
-                <button
-                  onClick={handleSendMessage}
-                  style={{ background: '#33691e', color: '#fff', border: 'none', padding: '0 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
-                >
-                  전송
-                </button>
-              </div>
-            </>
-          ) : (
-            <div style={{ flex: 1, padding: '30px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: '#fafafa', borderRadius: '0 0 12px 12px' }}>
-              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
-              <h4 style={{ margin: '0 0 8px 0', color: '#333', fontSize: '15px' }}>[관리형 전용 혜택] 3자 실시간 소통 메시지</h4>
-              <p style={{ color: '#666', fontSize: '13px', lineHeight: '1.6', maxWidth: '300px', margin: '0 0 15px 0' }}>
-                관리자 및 학부모님이 수험생의 학습 질의응답 및 특이사항을 실시간으로 소통하고 케어하는 전용 메시지 기능입니다.
-              </p>
-              <span style={{ background: '#e3f2fd', color: '#0d47a1', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #bbdefb' }}>
-                💡 관리자 문의를 통해 관리형 서비스 전환 시 혜택이 제공됩니다
-              </span>
-            </div>
-          )}
-        </div>
+        <ThreeWayChat sessionId={sessionId} currentUserRole="student" height="400px" />
       </div>
 
       {/* 하단: 출석 및 관리 현황 */}
@@ -793,57 +720,14 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
 
       {/* 1줄 학습 요약 & 완료 인증 모달 */}
       {showVerifyModal && verifyTarget && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: '#fff', padding: '25px', borderRadius: '15px', maxWidth: '460px', width: '90%', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#1565c0', fontSize: '18px' }}>📝 학습 완료 및 1줄 요약 인증</h3>
-            <p style={{ color: '#666', fontSize: '13px', marginBottom: '15px' }}>
-              <strong>[{verifyTarget.task.task_title || verifyTarget.task.unit_name}]</strong> 단원 학습을 완료하셨나요? 오늘 배운 내용을 간단히 1줄로 작성해주세요.
-            </p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '4px' }}>
-                  오늘 배운 핵심 1줄 요약 (선택):
-                </label>
-                <input 
-                  type="text" 
-                  value={oneLineSummary} 
-                  onChange={e => setOneLineSummary(e.target.value)} 
-                  placeholder="예: 지수함수의 기본 성질과 그래프 대칭성을 이해함" 
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '14px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '4px' }}>
-                  실제 공부 소요 시간 (분):
-                </label>
-                <input 
-                  type="number" 
-                  value={actualMinsInput} 
-                  onChange={e => setActualMinsInput(Number(e.target.value))} 
-                  style={{ width: '100px', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', textAlign: 'center' }}
-                /> 분
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button 
-                onClick={() => setShowVerifyModal(false)}
-                style={{ background: '#f5f5f5', border: '1px solid #ccc', color: '#555', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                취소
-              </button>
-              <button 
-                onClick={handleConfirmVerifyTask}
-                disabled={verifying}
-                style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                {verifying ? '저장 중...' : '✅ 완료 인증하기'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <TaskVerificationModal
+          sessionId={sessionId}
+          targetTask={verifyTarget}
+          onClose={() => setShowVerifyModal(false)}
+          onVerified={(weekNum, taskIdx) => {
+            toggleTask(weekNum, taskIdx, true);
+          }}
+        />
       )}
       
     </div>

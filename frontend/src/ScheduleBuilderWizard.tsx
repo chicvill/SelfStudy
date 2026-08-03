@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 import { API_URL } from './config';
+import TextbookSelectorChips from './components/TextbookSelectorChips';
 
 interface Props {
   sessionId: string;
@@ -263,32 +264,11 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           <h3>📚 Step 2: 과목 및 교재 확정</h3>
           <p style={{ color: '#666' }}>AI가 수험생의 목표에 맞춰 분석한 대표 교재 및 과목 리스트입니다.</p>
           
-          {recommendedTextbooks.length > 0 && (
-            <div style={{ marginBottom: '20px', background: '#e8f5e9', padding: '15px', borderRadius: '10px', border: '1px solid #c8e6c9' }}>
-              <strong style={{ fontSize: '14px', color: '#2e7d32' }}>📖 AI 추천 대표 교재 & 목차 원클릭 자동 설정:</strong>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
-                {recommendedTextbooks.map((tb, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => applyTextbookToSubjects(tb)}
-                    style={{
-                      background: selectedTextbookTitle === tb.title ? '#2e7d32' : '#fff',
-                      color: selectedTextbookTitle === tb.title ? '#fff' : '#2e7d32',
-                      border: '1px solid #2e7d32',
-                      padding: '8px 14px',
-                      borderRadius: '20px',
-                      fontSize: '13px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    📘 {tb.title} ({tb.total_pages || 120}p)
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <TextbookSelectorChips
+            recommendedTextbooks={recommendedTextbooks}
+            selectedTextbookTitle={selectedTextbookTitle}
+            onSelectTextbook={applyTextbookToSubjects}
+          />
 
           {subjects.map((s, idx) => (
             <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>

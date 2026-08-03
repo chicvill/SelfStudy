@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 import { API_URL } from './config';
+import RiskStudentBanner from './components/RiskStudentBanner';
+import ThreeWayChat from './components/ThreeWayChat';
 
 interface AdminDashboardProps {
   onLogout?: () => void;
@@ -319,36 +321,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
     <div style={{ maxWidth: '1400px', margin: '40px auto', padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
       {/* 🚨 AI 위험군 수험생 감지 뱃지 */}
-      {riskStudents.length > 0 && (
-        <div style={{ background: '#ffebee', border: '1px solid #ffcdd2', padding: '15px 20px', borderRadius: '10px' }}>
-          <div style={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🚨 AI 집중 케어가 필요한 수험생 (진도 완료율 50% 미만): {riskStudents.length}명
-          </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {riskStudents.map((st, idx) => (
-              <div key={idx} style={{ background: '#fff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #ffcdd2', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div>
-                  <span style={{ fontWeight: 'bold', color: '#333' }}>{st.name}</span>
-                  <span style={{ fontSize: '12px', color: '#d32f2f', fontWeight: 'bold', marginLeft: '6px' }}>
-                    (완료율 {st.completion_rate}%)
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (st.session_id) {
-                      setSelectedStudent(st.session_id);
-                    }
-                  }}
-                  style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
-                >
-                  1:1 상담 💬
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <RiskStudentBanner onSelectStudent={setSelectedStudent} />
 
       <div style={{ display: 'flex', gap: '30px' }}>
         {/* 이용자(학생) 목록 사이드바 */}
@@ -955,56 +928,7 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
               </div>
 
               {/* 3자 실시간 메시지 소통 */}
-              <div style={{ flex: 1, minWidth: '350px', background: '#f1f8e9', border: '1px solid #c5e1a5', borderRadius: '12px', display: 'flex', flexDirection: 'column', height: '400px' }}>
-                <h3 style={{ margin: '15px 20px', color: '#33691e', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  💬 3자 실시간 메시지 창 (특이사항 소통)
-                </h3>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9fbe7' }}>
-                  {messages.map(m => {
-                    const isSelf = m.sender_role === 'admin';
-                    let roleLabel = '이용자';
-                    if (m.sender_role === 'admin') roleLabel = '관리자';
-                    if (m.sender_role === 'parent') roleLabel = '학부모';
-
-                    return (
-                      <div key={m.id} style={{ display: 'flex', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}>
-                        <div style={{
-                          maxWidth: '85%', padding: '10px 14px', borderRadius: '12px',
-                          background: isSelf ? '#33691e' : '#fff',
-                          color: isSelf ? '#fff' : '#333',
-                          border: '1px solid #dcdde1',
-                          boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                          fontSize: '13px'
-                        }}>
-                          <div style={{ fontSize: '10px', color: isSelf ? '#c5e1a5' : '#888', marginBottom: '4px', fontWeight: 'bold' }}>
-                            {roleLabel}
-                          </div>
-                          <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {messages.length === 0 && (
-                    <div style={{ color: '#999', textAlign: 'center', marginTop: '100px', fontSize: '13px' }}>대화 내역이 없습니다.</div>
-                  )}
-                </div>
-                <div style={{ padding: '10px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 12px 12px', display: 'flex', gap: '10px' }}>
-                  <input
-                    type="text"
-                    value={newMsg}
-                    onChange={e => setNewMsg(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="소통 메시지를 입력하세요..."
-                    style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' }}
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    style={{ background: '#33691e', color: '#fff', border: 'none', padding: '0 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
-                  >
-                    전송
-                  </button>
-                </div>
-              </div>
+              <ThreeWayChat sessionId={selectedStudent} currentUserRole="admin" height="400px" />
 
             </div>
           </div>

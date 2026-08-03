@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 import { API_URL } from './config';
+import ThreeWayChat from './components/ThreeWayChat';
 
 export default function ParentDashboard() {
   const [observerCode, setObserverCode] = useState("");
@@ -379,84 +380,7 @@ export default function ParentDashboard() {
             </div>
 
             {/* 3자 실시간 메시지 소통 */}
-            <div style={{ flex: 1, minWidth: '300px', background: '#f1f8e9', border: '1px solid #c5e1a5', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '350px' }}>
-              <div style={{ background: '#33691e', padding: '12px 15px', borderRadius: '8px 8px 0 0', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>
-                💬 3자 소통방 (관리자/자녀 피드백 주고받기)
-              </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', background: '#f9fbe7' }}>
-                {messages.map(m => {
-                  const isSelf = m.sender_role === 'parent';
-                  let roleLabel = '이용자(학생)';
-                  if (m.sender_role === 'admin') roleLabel = '관리자';
-                  if (m.sender_role === 'parent') roleLabel = '학부모(나)';
-
-                  return (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: isSelf ? 'flex-end' : 'flex-start' }}>
-                      <div style={{
-                        maxWidth: '85%', padding: '8px 12px', borderRadius: '12px',
-                        background: isSelf ? '#33691e' : '#fff',
-                        color: isSelf ? '#fff' : '#333',
-                        border: '1px solid #dcdde1',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                        fontSize: '12px'
-                      }}>
-                        <div style={{ fontSize: '9px', color: isSelf ? '#c5e1a5' : '#888', marginBottom: '3px', fontWeight: 'bold' }}>
-                          {roleLabel}
-                        </div>
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {messages.length === 0 && (
-                  <div style={{ color: '#999', textAlign: 'center', marginTop: '80px', fontSize: '12px' }}>대화 내역이 없습니다.</div>
-                )}
-              </div>
-              
-              {/* 👏 긍정 응원 원클릭 카드 */}
-              <div style={{ background: '#f0f4c3', padding: '6px 10px', display: 'flex', gap: '6px', overflowX: 'auto', flexWrap: 'nowrap' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#33691e', whiteSpace: 'nowrap', alignSelf: 'center' }}>👏 응원 보내기:</span>
-                <button
-                  type="button"
-                  onClick={() => sendEncouragementCard("🍕 오늘도 최선을 다하는 네가 정말 자랑스러워! 화이팅!")}
-                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
-                >
-                  🍕 오늘도 수고했어!
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sendEncouragementCard("☕ 차근차근 꾸준히 하는 습관이 최고의 무기란다! 끝까지 응원할게!")}
-                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
-                >
-                  ☕ 끝까지 화이팅!
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sendEncouragementCard("💯 대단하다! 차근차근 목표를 향해 나아가자!")}
-                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
-                >
-                  💯 정말 대견해!
-                </button>
-              </div>
-
-              <div style={{ padding: '8px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 8px 8px', display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newMsg}
-                  onChange={e => setNewMsg(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="관리자에게 전달할 메모 입력..."
-                  style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none', fontSize: '12px' }}
-                />
-                <button
-                  onClick={handleSendMessage}
-                  style={{ background: '#33691e', color: '#fff', border: 'none', padding: '0 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
-                >
-                  전송
-                </button>
-              </div>
-            </div>
-
+            <ThreeWayChat sessionId={scheduleData?.payload?.session_id || ''} currentUserRole="parent" showEncouragementCards={true} />
           </div>
           
           <div style={{ textAlign: 'center', color: '#888', fontSize: '13px' }}>
