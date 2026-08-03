@@ -132,6 +132,15 @@ class GenerateScheduleFinalPayload(BaseModel):
     ai_draft: dict
     session_id: str
 
+class RecommendTextbooksPayload(BaseModel):
+    user_goal: Any
+
+class TaskVerifyPayload(BaseModel):
+    session_id: str
+    task_title: str
+    one_line_summary: Optional[str] = ""
+    actual_minutes: Optional[int] = 0
+
 class ChatPayload(BaseModel):
     session_id: str
     message: str
@@ -384,6 +393,56 @@ async def api_generate_units(payload: GenUnitsPayload):
 async def api_generate_unit_weights(payload: GenUnitWeightsPayload):
     res = await context.ai_tutor.generate_unit_weights(payload.subjects_with_units, payload.user_goal)
     return {"status": "success", "data": res}
+
+@app.post("/knowledge/recommend_textbooks")
+async def api_recommend_textbooks(payload: RecommendTextbooksPayload):
+    res = await context.ai_tutor.recommend_textbooks_and_toc(payload.user_goal)
+    return {"status": "success", "data": res}
+
+@app.post("/knowledge/task_verify")
+async def api_task_verify(payload: TaskVerifyPayload):
+    doc_id = f"kb_verify_{uuid.uuid4().hex[:8]}"
+    tags = ["학습검증", f"sess_{payload.session_id}"]
+    verify_data = {
+        "session_id": payload.session_id,
+        "task_title": payload.task_title,
+        "one_line_summary": payload.one_line_summary,
+        "actual_minutes": payload.actual_minutes,
+        "timestamp": datetime.now().isoformat()
+    }
+    context.knowledge_repo.insert_knowledge(doc_id=doc_id, domain_type="TaskVerification", tags=tags, payload=verify_data)
+    return {"status": "success", "data": verify_data}
+
+@app.get("/knowledge/admin_risk_students")
+async def api_admin_risk_students():
+    all_schedules = context.knowledge_repo.search_knowledge_by_tags(["최종스케줄"], limit=100)
+    risk_list = []
+    for doc in all_schedules:
+        payload = doc.get("payload", {})
+        sess_id = payload.get("session_id")
+        curriculum = payload.get("curriculum", [])
+        total_tasks = 0
+        completed_tasks = 0
+        for week in curriculum:
+            if isinstance(week, dict):
+                for t in week.get("daily_tasks", []):
+                    if isinstance(t, dict):
+                        total_tasks += 1
+                        if t.get("completed"):
+                            completed_tasks += 1
+        rate = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 100
+        if rate < 60:
+            user_info = context.user_repo.get_user_info(sess_id) if sess_id else None
+            name = user_info.get("name", sess_id) if (user_info and isinstance(user_info, dict)) else (sess_id or "수험생")
+            risk_list.append({
+                "session_id": sess_id,
+                "name": name,
+                "completion_rate": rate,
+                "total_tasks": total_tasks,
+                "completed_tasks": completed_tasks,
+                "plan_title": payload.get("plan_title", "진도 계획")
+            })
+    return {"status": "success", "data": risk_list}
 
 @app.post("/knowledge/generate_schedule_final")
 async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):

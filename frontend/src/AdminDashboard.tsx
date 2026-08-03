@@ -44,9 +44,24 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
     recent_messages: []
   });
 
+  // High risk students state
+  const [riskStudents, setRiskStudents] = useState<any[]>([]);
+
   useEffect(() => {
     fetchStudents();
+    fetchRiskStudents();
   }, []);
+
+  const fetchRiskStudents = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/knowledge/admin_risk_students`);
+      if (res.data.status === 'success') {
+        setRiskStudents(res.data.data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Poll real-time admin alerts every 3 seconds
   useEffect(() => {
@@ -301,11 +316,45 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const selectedDateScheduled = editScheduledTimes[selectedDateDayName];
 
   return (
-    <div style={{ maxWidth: '1400px', margin: '40px auto', padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', gap: '30px' }}>
+    <div style={{ maxWidth: '1400px', margin: '40px auto', padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* 이용자(학생) 목록 사이드바 */}
-      <div style={{ width: '280px', borderRight: '1px solid #eee', paddingRight: '20px', flexShrink: 0 }}>
-        <h3 style={{ color: '#1976d2', marginTop: 0 }}>👥 관리 대상 이용자(학생)</h3>
+      {/* 🚨 AI 위험군 수험생 감지 뱃지 */}
+      {riskStudents.length > 0 && (
+        <div style={{ background: '#ffebee', border: '1px solid #ffcdd2', padding: '15px 20px', borderRadius: '10px' }}>
+          <div style={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🚨 AI 집중 케어가 필요한 수험생 (진도 완료율 50% 미만): {riskStudents.length}명
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {riskStudents.map((st, idx) => (
+              <div key={idx} style={{ background: '#fff', padding: '8px 14px', borderRadius: '8px', border: '1px solid #ffcdd2', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div>
+                  <span style={{ fontWeight: 'bold', color: '#333' }}>{st.name}</span>
+                  <span style={{ fontSize: '12px', color: '#d32f2f', fontWeight: 'bold', marginLeft: '6px' }}>
+                    (완료율 {st.completion_rate}%)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (st.session_id) {
+                      setSelectedStudent(st.session_id);
+                      fetchStudentDetails(st.session_id);
+                    }
+                  }}
+                  style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
+                >
+                  1:1 상담 💬
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '30px' }}>
+        {/* 이용자(학생) 목록 사이드바 */}
+        <div style={{ width: '280px', borderRight: '1px solid #eee', paddingRight: '20px', flexShrink: 0 }}>
+          <h3 style={{ color: '#1976d2', marginTop: 0 }}>👥 관리 대상 이용자(학생)</h3>
 
         {/* NFC 시뮬레이터 */}
         <div style={{ background: '#eceff1', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '12px', border: '1px solid #cfd8dc' }}>
@@ -959,14 +1008,16 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
               </div>
 
             </div>
-
           </div>
         ) : (
-          <div style={{ color: '#999', textAlign: 'center', marginTop: '100px' }}>이용자(학생)를 선택해 주세요.</div>
+          <div style={{ color: '#999', textAlign: 'center', marginTop: '100px' }}>
+            이용자(학생)를 선택해 주세요.
+          </div>
         )}
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 const inputStyle = {

@@ -335,6 +335,47 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                   📋 월요일 시간표 전체 요일에 재적용
                 </button>
               </div>
+              
+              {/* 주간 총 공부시간 계산 및 버아웃 경고 */}
+              {(() => {
+                let totalMins = 0;
+                activeDaysList.forEach(d => {
+                  const t = scheduledTimes[d] || { in: '09:00', out: '18:00' };
+                  const [inH, inM] = t.in.split(':').map(Number);
+                  const [outH, outM] = t.out.split(':').map(Number);
+                  const diff = (outH * 60 + outM) - (inH * 60 + inM);
+                  if (diff > 0) totalMins += diff;
+                });
+                const weeklyHours = Math.round(totalMins / 60);
+                const isOver60 = weeklyHours > 60;
+                return (
+                  <div style={{ marginBottom: '15px', padding: '10px', borderRadius: '8px', background: isOver60 ? '#fff3e0' : '#e8f5e9', border: `1px solid ${isOver60 ? '#ffe0b2' : '#c8e6c9'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: isOver60 ? '#e65100' : '#2e7d32' }}>
+                      📊 예상 주간 총 학습 시간: {weeklyHours}시간
+                    </span>
+                    {isOver60 && (
+                      <span style={{ fontSize: '12px', color: '#d32f2f', fontWeight: 'bold', background: '#ffebee', padding: '4px 8px', borderRadius: '6px' }}>
+                        💡 주 60시간 초과: 무리한 계획은 버아웃을 유발할 수 있습니다!
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Buffer Sunday 옵션 */}
+              <div style={{ marginBottom: '15px', background: '#f5f5f5', padding: '10px 15px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  type="checkbox"
+                  id="wantsBuffer"
+                  checked={wantsBuffer}
+                  onChange={e => setWantsBuffer(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <label htmlFor="wantsBuffer" style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 'bold', color: '#444' }}>
+                  🗓️ 일요일을 '보충 학습/자율 휴식일(Buffer Day)'로 지정하여 주간 학습 완성도 높이기
+                </label>
+              </div>
+
               <p style={{ color: '#888', fontSize: '12px', marginTop: '0', marginBottom: '20px' }}>
                 * 월요일 시간을 변경하면 화~일요일 시간표에 기본값(디폴트)으로 자동 설정되며, 요일별 개별 수정이 가능합니다.
               </p>

@@ -34,7 +34,37 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   const [attendance, setAttendance] = useState<any[]>([]);
   const [managementType, setManagementType] = useState<string>('자율형');
   const [scheduledTimes, setScheduledTimes] = useState<any>({});
-  const [voucherExpiry, setVoucherExpiry] = useState<string>('');
+  // 1줄 요약 및 완료 인증 모달 상태
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyTarget, setVerifyTarget] = useState<{weekNum: number, taskIdx: number, task: any} | null>(null);
+  const [oneLineSummary, setOneLineSummary] = useState('');
+  const [actualMinsInput, setActualMinsInput] = useState<number>(30);
+  const [verifying, setVerifying] = useState(false);
+
+  const handleOpenVerifyModal = (weekNum: number, taskIdx: number, task: any) => {
+    setVerifyTarget({ weekNum, taskIdx, task });
+    setOneLineSummary('');
+    setActualMinsInput(task.estimated_minutes || 30);
+    setShowVerifyModal(true);
+  };
+
+  const handleConfirmVerifyTask = async () => {
+    if (!verifyTarget) return;
+    setVerifying(true);
+    try {
+      await axios.post(`${API_URL}/knowledge/task_verify`, {
+        session_id: sessionId,
+        task_title: verifyTarget.task.task_title || verifyTarget.task.unit_name,
+        one_line_summary: oneLineSummary.trim(),
+        actual_minutes: Number(actualMinsInput) || 30
+      });
+      await toggleTask(verifyTarget.weekNum, verifyTarget.taskIdx, true);
+    } catch (e) {
+      console.error("Verification error", e);
+    }
+    setVerifying(false);
+    setShowVerifyModal(false);
+  };
 
   // 3-way messaging
   const [messagesList, setMessagesList] = useState<any[]>([]);
@@ -430,17 +460,35 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
                   <tr key={idx} data-date={task.date} style={{ borderBottom: '1px solid #eee', background: isChecked ? '#fdfdfd' : '#fff' }}>
                     <td style={{ padding: '10px 12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
                     <td style={{ padding: '10px 12px', textAlign: 'center', color: '#666', whiteSpace: 'nowrap' }}>{task.estimated_minutes}분</td>
-                    <td style={{ padding: '10px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none', wordBreak: 'keep-all', lineHeight: '1.4' }}>{task.unit_name}</td>
+                    <td style={{ padding: '10px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none', wordBreak: 'keep-all', lineHeight: '1.4' }}>
+                      <div style={{ fontWeight: 'bold' }}>{task.task_title || task.unit_name}</div>
+                      {task.page_range && (
+                        <span style={{ fontSize: '11px', background: '#e3f2fd', color: '#1565c0', padding: '2px 6px', borderRadius: '4px', marginTop: '3px', display: 'inline-block' }}>
+                          📖 {task.page_range}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {isChecked ? (
-                        <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '13px' }}>성취율: {rate}%</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '13px' }}>✅ 완료 ({rate || 100}%)</span>
+                          <button onClick={() => toggleTask(task.week_number, task.task_index, false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '11px' }}>취소</button>
+                        </div>
                       ) : (
-                        <button 
-                          onClick={() => startEvaluation(task.week_number, task.task_index, task)}
-                          style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}
-                        >
-                          🎙️ 평가받기
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button 
+                            onClick={() => handleOpenVerifyModal(task.week_number, task.task_index, task)}
+                            style={{ background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                          >
+                            📝 요약/완료
+                          </button>
+                          <button 
+                            onClick={() => startEvaluation(task.week_number, task.task_index, task)}
+                            style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #81c784', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', whiteSpace: 'nowrap' }}
+                          >
+                            🎙️ 평가
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -742,6 +790,61 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
           </div>
         )}
       </div>
+
+      {/* 1줄 학습 요약 & 완료 인증 모달 */}
+      {showVerifyModal && verifyTarget && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#fff', padding: '25px', borderRadius: '15px', maxWidth: '460px', width: '90%', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#1565c0', fontSize: '18px' }}>📝 학습 완료 및 1줄 요약 인증</h3>
+            <p style={{ color: '#666', fontSize: '13px', marginBottom: '15px' }}>
+              <strong>[{verifyTarget.task.task_title || verifyTarget.task.unit_name}]</strong> 단원 학습을 완료하셨나요? 오늘 배운 내용을 간단히 1줄로 작성해주세요.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '4px' }}>
+                  오늘 배운 핵심 1줄 요약 (선택):
+                </label>
+                <input 
+                  type="text" 
+                  value={oneLineSummary} 
+                  onChange={e => setOneLineSummary(e.target.value)} 
+                  placeholder="예: 지수함수의 기본 성질과 그래프 대칭성을 이해함" 
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '14px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#555', display: 'block', marginBottom: '4px' }}>
+                  실제 공부 소요 시간 (분):
+                </label>
+                <input 
+                  type="number" 
+                  value={actualMinsInput} 
+                  onChange={e => setActualMinsInput(Number(e.target.value))} 
+                  style={{ width: '100px', padding: '8px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', textAlign: 'center' }}
+                /> 분
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button 
+                onClick={() => setShowVerifyModal(false)}
+                style={{ background: '#f5f5f5', border: '1px solid #ccc', color: '#555', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                취소
+              </button>
+              <button 
+                onClick={handleConfirmVerifyTask}
+                disabled={verifying}
+                style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                {verifying ? '저장 중...' : '✅ 완료 인증하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
     </div>
   );

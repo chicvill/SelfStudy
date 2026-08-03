@@ -22,6 +22,9 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
   const [overallStrategy, setOverallStrategy] = useState('');
   const [targetDateIso, setTargetDateIso] = useState('');
   
+  const [recommendedTextbooks, setRecommendedTextbooks] = useState<any[]>([]);
+  const [selectedTextbookTitle, setSelectedTextbookTitle] = useState<string>('');
+
   useEffect(() => {
     const loadSession = async () => {
       setLoading(true);
@@ -49,10 +52,41 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
       
       // Fallback: If no saved subjects, generate them via AI
       await generateSubjects();
+      await fetchRecommendedTextbooks();
     };
     
     loadSession();
   }, []);
+
+  const fetchRecommendedTextbooks = async () => {
+    try {
+      const res = await axios.post(`${API_URL}/knowledge/recommend_textbooks`, {
+        user_goal: goalData
+      });
+      const tbList = res.data?.data?.textbooks || res.data?.data?.Textbooks || [];
+      setRecommendedTextbooks(tbList);
+    } catch (e) {
+      console.error("Textbook recommendation error", e);
+    }
+  };
+
+  const applyTextbookToSubjects = (tb: any) => {
+    setSelectedTextbookTitle(tb.title);
+    const formattedSubject = {
+      subject_name: tb.title,
+      textbook_title: tb.title,
+      weight_percent: 100,
+      units: (tb.units || []).map((u: any) => ({
+        unit_name: u.unit_name,
+        start_page: u.start_page,
+        end_page: u.end_page,
+        difficulty_type: u.difficulty_type || 'normal',
+        weight_multiplier: u.weight_multiplier || 1.0,
+        weight_percent: Math.round(100 / ((tb.units && tb.units.length) || 1))
+      }))
+    };
+    setSubjects([formattedSubject]);
+  };
 
   const generateSubjects = async () => {
     setLoading(true);
@@ -226,8 +260,36 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
 
       {!loading && step === 2 && (
         <div>
-          <h3>📚 Step 2: 과목 리스트 확정</h3>
-          <p style={{ color: '#666' }}>AI가 도출한 과목 리스트입니다. 누락되거나 불필요한 과목이 있다면 수정해주세요.</p>
+          <h3>📚 Step 2: 과목 및 교재 확정</h3>
+          <p style={{ color: '#666' }}>AI가 수험생의 목표에 맞춰 분석한 대표 교재 및 과목 리스트입니다.</p>
+          
+          {recommendedTextbooks.length > 0 && (
+            <div style={{ marginBottom: '20px', background: '#e8f5e9', padding: '15px', borderRadius: '10px', border: '1px solid #c8e6c9' }}>
+              <strong style={{ fontSize: '14px', color: '#2e7d32' }}>📖 AI 추천 대표 교재 & 목차 원클릭 자동 설정:</strong>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+                {recommendedTextbooks.map((tb, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => applyTextbookToSubjects(tb)}
+                    style={{
+                      background: selectedTextbookTitle === tb.title ? '#2e7d32' : '#fff',
+                      color: selectedTextbookTitle === tb.title ? '#fff' : '#2e7d32',
+                      border: '1px solid #2e7d32',
+                      padding: '8px 14px',
+                      borderRadius: '20px',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📘 {tb.title} ({tb.total_pages || 120}p)
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {subjects.map((s, idx) => (
             <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <input 
@@ -279,21 +341,39 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
 
       {!loading && step === 4 && (
         <div>
-          <h3>📑 Step 4: 단원(목차) 리스트 확정</h3>
-          <p style={{ color: '#666' }}>과목별 구체적인 학습 단원(Action) 리스트입니다. 자유롭게 편집하세요.</p>
+          <h3>📑 Step 4: 교재 단원(목차) 및 페이지 범주 확정</h3>
+          <p style={{ color: '#666' }}>교재의 단원명과 시작/끝 페이지 범위를 편집할 수 있습니다.</p>
           <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '10px' }}>
             {subjects.map((s, sIdx) => (
               <div key={sIdx} style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
                 <h4 style={{ margin: '0 0 15px 0', color: '#1565c0' }}>{s.subject_name}</h4>
                 {(s.units || []).map((u:any, uIdx:number) => (
-                  <div key={uIdx} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <div key={uIdx} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <input 
                       type="text" 
                       value={u.unit_name} 
                       onChange={e => handleUnitChange(sIdx, uIdx, 'unit_name', e.target.value)} 
-                      style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
+                      style={{ flex: 2, minWidth: '160px', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
                     />
-                    <button onClick={() => handleRemoveUnit(sIdx, uIdx)} style={{ background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '6px', padding: '0 10px' }}>X</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', color: '#666' }}>p.</span>
+                      <input 
+                        type="number" 
+                        value={u.start_page || ''} 
+                        placeholder="시작" 
+                        onChange={e => handleUnitChange(sIdx, uIdx, 'start_page', Number(e.target.value))} 
+                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center' }}
+                      />
+                      <span>~</span>
+                      <input 
+                        type="number" 
+                        value={u.end_page || ''} 
+                        placeholder="끝" 
+                        onChange={e => handleUnitChange(sIdx, uIdx, 'end_page', Number(e.target.value))} 
+                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center' }}
+                      />
+                    </div>
+                    <button onClick={() => handleRemoveUnit(sIdx, uIdx)} style={{ background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 10px' }}>X</button>
                   </div>
                 ))}
                 <button onClick={() => handleAddUnit(sIdx)} style={{ background: '#fff', border: '1px solid #ccc', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}>+ 단원 추가</button>

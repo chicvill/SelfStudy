@@ -309,3 +309,30 @@ class AITutor:
   }}
 """
         return await self._call_gemini(prompt)
+
+    async def recommend_textbooks_and_toc(self, user_goal: Any) -> dict:
+        goal_str = json.dumps(user_goal, ensure_ascii=False) if isinstance(user_goal, dict) else str(user_goal)
+        prompt = f"""
+당신은 대한민국 최고의 학습 수험 컨설턴트 AI입니다.
+수험생의 목표: {goal_str}
+
+[요구사항]
+- 수험생의 목표(내신, 수능, 자격증, 공무원 등)에 가장 적합한 **추천 교재 Top 3**와 각 교재의 **실제 목차(단원명, 시작페이지 start_page, 끝페이지 end_page, 단원 유형 difficulty_type: concept|normal|hard)**를 도출해주세요.
+- 출력 형식:
+  {{
+    "textbooks": [
+      {{
+        "title": "EBS 수능특강 수학I",
+        "publisher": "EBS",
+        "total_pages": 120,
+        "units": [
+          {{"unit_name": "지수와 로그", "start_page": 6, "end_page": 25, "difficulty_type": "concept", "weight_multiplier": 0.8}},
+          {{"unit_name": "지수함수와 로그함수", "start_page": 26, "end_page": 60, "difficulty_type": "normal", "weight_multiplier": 1.0}},
+          {{"unit_name": "삼각함수 활용 및 고난도 수열", "start_page": 61, "end_page": 120, "difficulty_type": "hard", "weight_multiplier": 1.3}}
+        ]
+      }}
+    ]
+  }}
+- 원시 JSON 문자열로만 반환하십시오.
+"""
+        return await self._call_gemini(prompt)

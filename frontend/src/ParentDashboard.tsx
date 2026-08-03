@@ -77,6 +77,23 @@ export default function ParentDashboard() {
     }
   };
 
+  const sendEncouragementCard = async (text: string) => {
+    const sessId = scheduleData?.payload?.session_id;
+    if (!sessId) return;
+    try {
+      await axios.post(`${API_URL}/knowledge/messages/${sessId}`, {
+        sender_role: 'parent',
+        content: text
+      });
+      const msgsResp = await axios.get(`${API_URL}/knowledge/messages/${sessId}`);
+      if (msgsResp.data.status === 'success') {
+        setMessages(msgsResp.data.data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Poll messages every 5 seconds if scheduleData is loaded
   useEffect(() => {
     if (scheduleData?.payload?.session_id) {
@@ -395,6 +412,33 @@ export default function ParentDashboard() {
                   <div style={{ color: '#999', textAlign: 'center', marginTop: '80px', fontSize: '12px' }}>대화 내역이 없습니다.</div>
                 )}
               </div>
+              
+              {/* 👏 긍정 응원 원클릭 카드 */}
+              <div style={{ background: '#f0f4c3', padding: '6px 10px', display: 'flex', gap: '6px', overflowX: 'auto', flexWrap: 'nowrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#33691e', whiteSpace: 'nowrap', alignSelf: 'center' }}>👏 응원 보내기:</span>
+                <button
+                  type="button"
+                  onClick={() => sendEncouragementCard("🍕 오늘도 최선을 다하는 네가 정말 자랑스러워! 화이팅!")}
+                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
+                >
+                  🍕 오늘도 수고했어!
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendEncouragementCard("☕ 차근차근 꾸준히 하는 습관이 최고의 무기란다! 끝까지 응원할게!")}
+                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
+                >
+                  ☕ 끝까지 화이팅!
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendEncouragementCard("💯 대단하다! 차근차근 목표를 향해 나아가자!")}
+                  style={{ background: '#fff', border: '1px solid #aed581', borderRadius: '12px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 'bold', color: '#33691e' }}
+                >
+                  💯 정말 대견해!
+                </button>
+              </div>
+
               <div style={{ padding: '8px', borderTop: '1px solid #c5e1a5', background: '#fff', borderRadius: '0 0 8px 8px', display: 'flex', gap: '8px' }}>
                 <input
                   type="text"

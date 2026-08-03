@@ -88,17 +88,30 @@ class Scheduler:
             for u in raw_units:
                 if isinstance(u, dict):
                     u_name = u.get("unit_name", "단원")
+                    start_p = u.get("start_page")
+                    end_p = u.get("end_page")
+                    tb_title = u.get("textbook_title") or subj.get("textbook_title") or ""
+                    mult = float(u.get("weight_multiplier") or 1.0)
                     try:
                         u_w = float(u.get("weight_percent") or 0) / 100.0
                     except (ValueError, TypeError):
                         u_w = 0.0
                 else:
                     u_name = str(u)
+                    start_p = None
+                    end_p = None
+                    tb_title = ""
+                    mult = 1.0
                     u_w = (1.0 / len(raw_units)) if raw_units else 1.0
 
                 u_mins = max(1, int(subj_total_mins * u_w)) if subj_total_mins > 0 else 30
                 unit_q.append({
                     "unit_name": u_name,
+                    "textbook_title": tb_title,
+                    "start_page": start_p,
+                    "end_page": end_p,
+                    "curr_page": start_p,
+                    "multiplier": mult,
                     "required_mins": u_mins,
                     "remaining_mins": u_mins
                 })
@@ -107,65 +120,94 @@ class Scheduler:
         # 3. Fill Calendar
         schedule_result = []
         week_num = 1
+        is_buffer_sunday_enabled = bool(form_data.get("buffer_sunday", True))
         
         for idx, day_info in enumerate(calendar):
             if idx > 0 and idx % len(avail_days) == 0:
                 week_num += 1
                 
             daily_tasks = []
-            
-            for subj in ai_draft.get("subjects", []):
-                if not isinstance(subj, dict):
-                    continue
-                subj_name = subj.get("subject_name", "미정 과목")
-                try:
-                    subj_w = float(subj.get("weight_percent") or 0) / 100.0
-                except (ValueError, TypeError):
-                    subj_w = 0.0
-                alloc_mins = int(day_info["capacity"] * subj_w)
-                
-                q = subject_queues.get(subj_name, [])
-                
-                while alloc_mins > 0 and q:
-                    curr_unit = q[0]
-                    if curr_unit["remaining_mins"] <= 0:
-                        q.pop(0)
-                        continue
 
-                    if curr_unit["remaining_mins"] <= alloc_mins:
-                        spent = curr_unit["remaining_mins"]
-                        alloc_mins -= spent
-                        if spent > 0:
+            # 일요일 Buffer Day 처리
+            if is_buffer_sunday_enabled and day_info['day_str'] == '일':
+                daily_tasks.append({
+                    "day": f"Week {week_num} - {day_info['day_str']}",
+                    "date": day_info["date"],
+                    "subject": "전과목 공통",
+                    "unit_name": "주간 미진한 과목 보충 및 자율 복습",
+                    "task_title": "🗓️ 보충 학습 및 주간 복습 (Buffer Day)",
+                    "estimated_minutes": day_info["capacity"],
+                    "completed": False,
+                    "is_buffer": True
+                })
+            else:
+                for subj in ai_draft.get("subjects", []):
+                    if not isinstance(subj, dict):
+                        continue
+                    subj_name = subj.get("subject_name", "미정 과목")
+                    try:
+                        subj_w = float(subj.get("weight_percent") or 0) / 100.0
+                    except (ValueError, TypeError):
+                        subj_w = 0.0
+                    alloc_mins = int(day_info["capacity"] * subj_w)
+                    
+                    q = subject_queues.get(subj_name, [])
+                    
+                    while alloc_mins > 0 and q:
+                        curr_unit = q[0]
+                        if curr_unit["remaining_mins"] <= 0:
+                            q.pop(0)
+                            continue
+
+                        if curr_unit["remaining_mins"] <= alloc_mins:
+                            spent = curr_unit["remaining_mins"]
+                            alloc_mins -= spent
+                            
+                            # 페이지 범위 계산
+                            start_p = curr_unit.get("curr_page") or curr_unit.get("start_page")
+                            end_p = curr_unit.get("end_page")
+                            page_range_str = f"p.{start_p}~p.{end_p}" if (start_p and end_p) else ""
+                            tb_prefix = f"[{curr_unit['textbook_title']}] " if curr_unit.get("textbook_title") else ""
+                            
+                            if spent > 0:
+                                daily_tasks.append({
+                                    "day": f"Week {week_num} - {day_info['day_str']}",
+                                    "date": day_info["date"],
+                                    "subject": subj_name,
+                                    "unit_name": curr_unit["unit_name"],
+                                    "task_title": f"{tb_prefix}{curr_unit['unit_name']} {page_range_str}".strip(),
+                                    "page_range": page_range_str,
+                                    "estimated_minutes": spent,
+                                    "completed": False
+                                })
+                            q.pop(0)
+                        else:
+                            curr_unit["remaining_mins"] -= alloc_mins
+                            start_p = curr_unit.get("curr_page") or curr_unit.get("start_page")
+                            end_p = curr_unit.get("end_page")
+                            page_range_str = f"p.{start_p}~p.{end_p}" if (start_p and end_p) else ""
+                            tb_prefix = f"[{curr_unit['textbook_title']}] " if curr_unit.get("textbook_title") else ""
+                            
                             daily_tasks.append({
                                 "day": f"Week {week_num} - {day_info['day_str']}",
                                 "date": day_info["date"],
                                 "subject": subj_name,
                                 "unit_name": curr_unit["unit_name"],
-                                "task_title": curr_unit["unit_name"],
-                                "estimated_minutes": spent,
+                                "task_title": f"{tb_prefix}{curr_unit['unit_name']} {page_range_str}".strip(),
+                                "page_range": page_range_str,
+                                "estimated_minutes": alloc_mins,
                                 "completed": False
                             })
-                        q.pop(0)
-                    else:
-                        curr_unit["remaining_mins"] -= alloc_mins
-                        daily_tasks.append({
-                            "day": f"Week {week_num} - {day_info['day_str']}",
-                            "date": day_info["date"],
-                            "subject": subj_name,
-                            "unit_name": curr_unit["unit_name"],
-                            "task_title": curr_unit["unit_name"],
-                            "estimated_minutes": alloc_mins,
-                            "completed": False
-                        })
-                        alloc_mins = 0
-                        
-            week_entry = next((w for w in schedule_result if w["week_number"] == week_num), None)
-            if not week_entry:
-                week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
-                schedule_result.append(week_entry)
+                            alloc_mins = 0
+                            
+            if daily_tasks:
+                week_entry = next((w for w in schedule_result if w["week_number"] == week_num), None)
+                if not week_entry:
+                    week_entry = {"week_number": week_num, "week_theme": f"{week_num}주차 학습", "daily_tasks": []}
+                    schedule_result.append(week_entry)
                 
-            if isinstance(week_entry.get("daily_tasks"), list):
-                week_entry["daily_tasks"].extend(daily_tasks)
+                if isinstance(week_entry.get("daily_tasks"), list):
+                    week_entry["daily_tasks"].extend(daily_tasks)
 
         return {
             "plan_title": ai_draft.get("plan_title", "맞춤형 진도 계획"),
