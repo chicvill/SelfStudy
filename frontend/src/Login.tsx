@@ -71,8 +71,14 @@ export default function Login({ onLogin, onOpenParentView }: LoginProps) {
       return;
     }
 
+    // 입력받은 아이디가 11자리 숫자일 경우 자동으로 하이픈 추가
+    let formattedId = id;
+    if (/^010[0-9]{8}$/.test(formattedId)) {
+      formattedId = formattedId.slice(0, 3) + '-' + formattedId.slice(3, 7) + '-' + formattedId.slice(7, 11);
+    }
+
     const phoneRegex = /^010-[0-9]{4}-[0-9]{4}$/;
-    if (!phoneRegex.test(id)) {
+    if (!phoneRegex.test(formattedId)) {
       setErrorMessage('아이디는 전화번호(010-1234-5678) 또는 참관 코드(P-010-1234-5678) 형식이어야 합니다.');
       return;
     }
@@ -83,25 +89,25 @@ export default function Login({ onLogin, onOpenParentView }: LoginProps) {
       if (isLoginMode) {
         // 로그인 처리
         const endpoint = `${API_URL}/knowledge/login`;
-        const res = await axios.post(endpoint, { user_id: id, password: pw }, { timeout: 10000 });
+        const res = await axios.post(endpoint, { user_id: formattedId, password: pw }, { timeout: 10000 });
 
         if (res.data && res.data.success) {
-          localStorage.setItem('selfstudy_saved_user_id', id);
+          localStorage.setItem('selfstudy_saved_user_id', formattedId);
           if (res.data.name) {
             localStorage.setItem('selfstudy_saved_user_name', res.data.name);
           }
-          onLogin(id);
+          onLogin(formattedId);
         } else {
           setErrorMessage(res.data.message || '아이디 또는 비밀번호가 올바르지 않습니다.');
         }
       } else {
         // 회원가입 처리
         const endpoint = `${API_URL}/knowledge/signup`;
-        const res = await axios.post(endpoint, { user_id: id, password: pw, name: userName }, { timeout: 10000 });
+        const res = await axios.post(endpoint, { user_id: formattedId, password: pw, name: userName }, { timeout: 10000 });
 
         if (res.data && res.data.success) {
           setSuccessMessage('🎉 회원가입이 성공적으로 완료 되었습니다! 이제 로그인해 주세요.');
-          localStorage.setItem('selfstudy_saved_user_id', id);
+          localStorage.setItem('selfstudy_saved_user_id', formattedId);
           setIsLoginMode(true);
           setPassword('');
           setName('');
