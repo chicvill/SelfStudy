@@ -1,0 +1,54 @@
+name: Auto Rebuild on Local Windows PC
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  rebuild-local:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build React Frontend
+        shell: cmd
+        run: |
+          cd frontend
+          call npm install
+          call npm run build
+
+      - name: Sync Dist to Backend
+        shell: cmd
+        run: |
+          if not exist "backend\dist" mkdir "backend\dist"
+          xcopy /E /Y /Q "frontend\dist\*" "backend\dist\"
+
+      - name: Sync Backend Dependencies
+        shell: cmd
+        run: |
+          cd backend
+          if not exist ".venv\Scripts\activate.bat" (
+              python -m venv .venv
+          )
+          call .venv\Scripts\activate.bat
+          pip install -r requirements.txt
+
+      - name: Restart Backend Server
+        shell: powershell
+        run: |
+          Write-Host "Updating local server process on Port 8001..."
+          $connections = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue
+          if ($connections) {
+              foreach ($conn in $connections) {
+                  $procId = $conn.OwningProcess
+                  if ($procId -gt 0) {
+                      Write-Host "Terminating process ID: $procId"
+                      Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+                  }
+              }
+          }
+          Write-Host "Successfully rebuilt frontend dist & updated backend dependencies."
+          Write-Host "RUN_PROD.BAT will restart backend with updated files."
