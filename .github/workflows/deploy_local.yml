@@ -13,33 +13,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build React Frontend
+      - name: Stop Running Server Process (Port 8001)
         shell: powershell
         run: |
-          Set-Location frontend
-          npm install
-          npm run build
-
-      - name: Sync Dist to Backend
-        shell: powershell
-        run: |
-          if (-not (Test-Path "backend\dist")) {
-              New-Item -ItemType Directory -Path "backend\dist" -Force
-          }
-          Copy-Item -Path "frontend\dist\*" -Destination "backend\dist\" -Recurse -Force
-
-      - name: Update Backend Dependencies
-        shell: powershell
-        run: |
-          if (-not (Test-Path "backend\.venv\Scripts\python.exe")) {
-              python -m venv backend\.venv
-          }
-          & "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.txt
-
-      - name: Restart Server Process on Port 8001
-        shell: powershell
-        run: |
-          Write-Host "Checking for active backend process on Port 8001..."
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          Write-Host "Stopping any running server on Port 8001 to release file locks..."
           $connections = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue
           if ($connections) {
               foreach ($conn in $connections) {
@@ -50,4 +28,37 @@ jobs:
                   }
               }
           }
-          Write-Host "Successfully rebuilt frontend dist & updated backend dependencies."
+
+      - name: Build React Frontend
+        shell: powershell
+        working-directory: ./frontend
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          & npm.cmd install
+          & npm.cmd run build
+
+      - name: Sync Dist to Backend
+        shell: powershell
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          if (-not (Test-Path "backend\dist")) {
+              New-Item -ItemType Directory -Path "backend\dist" -Force
+          }
+          Copy-Item -Path "frontend\dist\*" -Destination "backend\dist\" -Recurse -Force
+
+      - name: Update Backend Dependencies
+        shell: powershell
+        working-directory: ./backend
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          if (-not (Test-Path ".venv\Scripts\python.exe")) {
+              python -m venv .venv
+          }
+          & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
+
+      - name: Complete Build
+        shell: powershell
+        run: |
+          Write-Host "======================================================="
+          Write-Host "[SUCCESS] Frontend rebuilt & synced to backend/dist!"
+          Write-Host "======================================================="
