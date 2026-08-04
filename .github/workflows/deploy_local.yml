@@ -14,32 +14,32 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build React Frontend
-        shell: cmd
-        run: |
-          cd frontend
-          call npm install
-          call npm run build
-
-      - name: Sync Dist to Backend
-        shell: cmd
-        run: |
-          if not exist "backend\dist" mkdir "backend\dist"
-          xcopy /E /Y /Q "frontend\dist\*" "backend\dist\"
-
-      - name: Sync Backend Dependencies
-        shell: cmd
-        run: |
-          cd backend
-          if not exist ".venv\Scripts\activate.bat" (
-              python -m venv .venv
-          )
-          call .venv\Scripts\activate.bat
-          pip install -r requirements.txt
-
-      - name: Restart Backend Server
         shell: powershell
         run: |
-          Write-Host "Updating local server process on Port 8001..."
+          Set-Location frontend
+          npm install
+          npm run build
+
+      - name: Sync Dist to Backend
+        shell: powershell
+        run: |
+          if (-not (Test-Path "backend\dist")) {
+              New-Item -ItemType Directory -Path "backend\dist" -Force
+          }
+          Copy-Item -Path "frontend\dist\*" -Destination "backend\dist\" -Recurse -Force
+
+      - name: Update Backend Dependencies
+        shell: powershell
+        run: |
+          if (-not (Test-Path "backend\.venv\Scripts\python.exe")) {
+              python -m venv backend\.venv
+          }
+          & "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.txt
+
+      - name: Restart Server Process on Port 8001
+        shell: powershell
+        run: |
+          Write-Host "Checking for active backend process on Port 8001..."
           $connections = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue
           if ($connections) {
               foreach ($conn in $connections) {
@@ -51,4 +51,3 @@ jobs:
               }
           }
           Write-Host "Successfully rebuilt frontend dist & updated backend dependencies."
-          Write-Host "RUN_PROD.BAT will restart backend with updated files."
