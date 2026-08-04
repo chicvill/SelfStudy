@@ -33,8 +33,8 @@ build/
 *.sln
 *.sw?
 
-# Other Projects Isolation
-STcafe/
-*STcafe*
-SelfStudy/
+# Executables & Binaries
+cloudflared.exe
+*.exe
+
 
