@@ -48,6 +48,25 @@ if not exist ".venv\Scripts\python.exe" (
 call .venv\Scripts\activate.bat
 "%PY_EXE%" -m pip install -r requirements.txt
 
+echo [5/5] Restarting Server on Port 8001 and Cloudflare Tunnel...
+cd /d "%~dp0..\.."
+if exist .env (
+    for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+        set "%%A=%%B"
+    )
+)
+start "SelfStudy Unified Server" cmd /k "cd backend && call .venv\Scripts\activate.bat && python -m uvicorn main:app --host 0.0.0.0 --port 8001"
+
+if not "%CLOUDFLARE_TUNNEL_TOKEN%"=="" (
+    taskkill /f /im cloudflared.exe >nul 2>&1
+    if exist cloudflared.exe (
+        start "Cloudflare Tunnel" cmd /k "cloudflared.exe tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
+    ) else (
+        start "Cloudflare Tunnel" cmd /k "cloudflared tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
+    )
+)
+
 echo ========================================================
-echo [SUCCESS] Local Rebuild Completed Successfully!
+echo [SUCCESS] Local Rebuild and Service Restart Completed!
 echo ========================================================
+
