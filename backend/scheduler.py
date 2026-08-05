@@ -108,9 +108,9 @@ class Scheduler:
                         subject_textbooks[subj_name][tb_title].append({
                             "unit_name": str(u.get("unit_name", "단원")),
                             "textbook_title": tb_title,
-                            "start_page": None,
-                            "end_page": None,
-                            "curr_page": None,
+                            "start_page": 1,
+                            "end_page": 10,
+                            "curr_page": 1,
                             "multiplier": 1.0,
                             "total_pages": 10,
                             "remaining_pages": 10

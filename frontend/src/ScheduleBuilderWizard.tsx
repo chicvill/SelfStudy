@@ -143,9 +143,11 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
       const unitsWithPages = (s.units || []).map((u: any, idx: number) => {
         const start = idx === 0 ? Number(u.start_page) : (s.units[idx - 1]?.end_page ? Number(s.units[idx - 1].end_page) + 1 : Number(u.start_page));
         const end = Number(u.end_page);
-        const pages = !isNaN(start) && !isNaN(end) && end >= start ? (end - start + 1) : 10;
+        const finalStart = isNaN(start) ? 1 : start;
+        const finalEnd = isNaN(end) ? (finalStart + 9) : end;
+        const pages = finalEnd >= finalStart ? (finalEnd - finalStart + 1) : 10;
         subjPages += pages;
-        return { ...u, start_page: start, end_page: end, _pages: pages };
+        return { ...u, start_page: finalStart, end_page: finalEnd, _pages: pages };
       });
       totalAllPages += subjPages;
       return { ...s, units: unitsWithPages, _subjPages: subjPages };
@@ -188,8 +190,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           ...u,
           unit_name: typeof u === 'string' ? u : (u.unit_name || '단원'),
           weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0,
-          start_page: idx === 0 ? Number(u.start_page) : (s.units[idx - 1]?.end_page ? Number(s.units[idx - 1].end_page) + 1 : Number(u.start_page)),
-          end_page: Number(u.end_page)
+          start_page: Number(u.start_page) || 1,
+          end_page: Number(u.end_page) || 10
         }))
       }));
 
