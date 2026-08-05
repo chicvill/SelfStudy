@@ -293,8 +293,9 @@ class AITutor:
 단원이 포함된 과목 리스트: {json.dumps(subjects_with_units, ensure_ascii=False)}
 
 [요구사항]
-- 각 과목(subject) 내에서, 단원(units)들의 중요도와 학습 분량을 평가하여 단원별 비중(weight_percent)을 산출하세요.
-- '하나의 과목' 내에서 모든 단원 비중의 합은 100%가 되어야 합니다.
+- 각 과목(subject) 내에서, 단원(units)들에 배정된 페이지 수(end_page - start_page + 1)를 계산하여, 페이지 수에 정확하게 비례하도록 단원별 비중(weight_percent)을 산출하세요.
+- 만약 페이지 정보가 주어지지 않았다면 임의로 판단하되, 페이지 정보가 있다면 반드시 철저하게 수학적인 페이지 비율에 맞춰서 weight_percent를 할당하세요.
+- '하나의 과목' 내에서 모든 단원 비중의 합은 반드시 100%가 되어야 합니다.
 - 출력 형식:
   {{
     "subjects": [
