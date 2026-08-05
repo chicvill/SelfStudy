@@ -183,8 +183,8 @@ async def finalize_schedule(payload: FinalizePayload):
     for old_doc in old_results:
         if old_doc.get("payload", {}).get("status") != "superseded":
             old_doc["payload"]["status"] = "superseded"
-            context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
-            draft["ref_previous_schedule_id"] = old_doc["doc_id"]
+            context.knowledge_repo.insert_knowledge(doc_id=old_doc["id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+            draft["ref_previous_schedule_id"] = old_doc["id"]
             break
 
     context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
@@ -234,7 +234,7 @@ async def get_student_active_schedule(session_id: str):
                 # Update superseded status
                 payload_data["status"] = "superseded"
                 context.knowledge_repo.insert_knowledge(
-                    doc_id=active_doc["doc_id"],
+                    doc_id=active_doc["id"],
                     domain_type=active_doc["domain_type"],
                     tags=active_doc["tags"],
                     payload=payload_data
@@ -242,7 +242,7 @@ async def get_student_active_schedule(session_id: str):
                 
                 new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
                 observer_code = payload_data.get("observer_code", ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
-                new_schedule["ref_previous_schedule_id"] = active_doc["doc_id"]
+                new_schedule["ref_previous_schedule_id"] = active_doc["id"]
                 new_schedule["observer_code"] = observer_code
                 new_schedule["session_id"] = session_id
                 new_schedule["last_rescheduled_week"] = current_week
@@ -335,7 +335,7 @@ async def reschedule_auto(payload: RescheduleAutoPayload):
     
     active_doc["payload"]["status"] = "superseded"
     context.knowledge_repo.insert_knowledge(
-        doc_id=active_doc["doc_id"],
+        doc_id=active_doc["id"],
         domain_type=active_doc["domain_type"],
         tags=active_doc["tags"],
         payload=active_doc["payload"]
@@ -343,7 +343,7 @@ async def reschedule_auto(payload: RescheduleAutoPayload):
     
     new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
     observer_code = old_schedule.get("observer_code", ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
-    new_schedule["ref_previous_schedule_id"] = active_doc["doc_id"]
+    new_schedule["ref_previous_schedule_id"] = active_doc["id"]
     new_schedule["observer_code"] = observer_code
     new_schedule["session_id"] = payload.session_id
     new_schedule["last_rescheduled_week"] = datetime.now().isocalendar()[1]
