@@ -57,6 +57,7 @@ call .venv\Scripts\activate.bat
 
 echo [5/5] Restarting Server on Port 8001 and Cloudflare Tunnel...
 cd /d "%~dp0..\.."
+set RUNNER_TRACKING_ID=
 start "SelfStudy Unified Server" cmd /k "cd backend && call .venv\Scripts\activate.bat && python -m uvicorn main:app --host 0.0.0.0 --port 8001"
 
 taskkill /f /im cloudflared.exe >nul 2>&1
