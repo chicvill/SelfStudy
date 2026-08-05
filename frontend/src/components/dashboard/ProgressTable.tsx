@@ -190,12 +190,12 @@ export default function ProgressTable({
                   <td style={{ padding: '10px 12px', color: '#555', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{task.date} ({(typeof task.day === 'string' && task.day.includes('- ')) ? task.day.split('- ')[1] : task.day || '?'})</td>
                   <td style={{ padding: '10px 12px', textAlign: 'center', color: '#666', whiteSpace: 'nowrap' }}>{task.estimated_minutes}분</td>
                   <td style={{ padding: '10px 12px', color: isChecked ? '#aaa' : '#333', textDecoration: isChecked ? 'line-through' : 'none', wordBreak: 'keep-all', lineHeight: '1.4' }}>
-                    <div style={{ fontWeight: 'bold' }}>{task.task_title || task.unit_name}</div>
-                    {task.page_range && (
-                      <span style={{ fontSize: '11px', background: '#e3f2fd', color: '#1565c0', padding: '2px 6px', borderRadius: '4px', marginTop: '3px', display: 'inline-block' }}>
-                        📖 {task.page_range}
-                      </span>
-                    )}
+                    <div style={{ fontWeight: 'bold' }}>
+                      {task.page_range && task.task_title ? task.task_title.replace(task.page_range, '').trim() : (task.task_title || task.unit_name)}
+                      {task.page_range && (
+                        <span style={{ color: '#1565c0', marginLeft: '6px' }}>{task.page_range}</span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {isChecked ? (

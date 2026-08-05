@@ -175,7 +175,7 @@ class Scheduler:
                             
                             slice_start = curr_unit.get("curr_page")
                             if slice_start is not None:
-                                slice_end = slice_start + int(spent_pages) - 1
+                                slice_end = max(int(slice_start), int(slice_start) + int(spent_pages) - 1)
                                 if curr_unit["remaining_pages"] <= 0.5:
                                     slice_end = curr_unit["end_page"]
                                     
