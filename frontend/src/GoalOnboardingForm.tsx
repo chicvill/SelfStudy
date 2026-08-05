@@ -505,6 +505,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
               />
               <label htmlFor="wantsBuffer" style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 'bold', color: '#444' }}>
                 🗓️ 일요일을 '보충 학습/자율 휴식일(Buffer Day)'로 지정하여 주간 학습 완성도 높이기
+              </label>
             </div>
           </div>
         </div>
