@@ -86,6 +86,10 @@ foreach ($t in $distTargets) {
     Copy-Item -Path "$CurrentWorkspace\frontend\dist\*" -Destination $t -Recurse -Force
 }
 
+# 5.5 Sync Python code to Target Directory
+Write-Host "Syncing backend Python code to Target Directory..."
+Copy-Item -Path "$CurrentWorkspace\backend\*" -Destination "$TargetDir\backend\" -Recurse -Force -Exclude ".venv", "__pycache__"
+
 # 6. Sync Python dependencies
 Write-Host "Updating Python Virtual Environment..."
 Set-Location "$TargetDir\backend"
