@@ -389,7 +389,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                       <select 
                         value={workingTime.in} 
                         onChange={e => handleWorkingTimeChange('in', e.target.value)}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}
+                        style={{ height: '36px', padding: '0 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}
                       >
                         {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
                           <option key={t} value={t}>{t}</option>
@@ -402,7 +402,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                       <select 
                         value={workingTime.out} 
                         onChange={e => handleWorkingTimeChange('out', e.target.value)}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}
+                        style={{ height: '36px', padding: '0 10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', background: '#fff', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}
                       >
                         {TIME_OPTIONS_24H.map(t => (
                           <option key={t} value={t}>{t}</option>
@@ -416,7 +416,7 @@ export default function GoalOnboardingForm({ sessionId, userId, onComplete }: Go
                         <select 
                           value={workingTime.consult || '17:30'} 
                           onChange={e => handleWorkingTimeChange('consult', e.target.value)}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px', fontWeight: 'bold', color: '#e65100', cursor: 'pointer' }}
+                          style={{ height: '36px', padding: '0 10px', borderRadius: '8px', border: '1px solid #ffcc80', outline: 'none', background: '#fff8e1', fontSize: '14px', fontWeight: 'bold', color: '#e65100', cursor: 'pointer' }}
                         >
                           {TIME_OPTIONS_24H.filter(t => t !== '24:00').map(t => (
                             <option key={t} value={t}>{t}</option>
