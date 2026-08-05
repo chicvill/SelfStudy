@@ -384,7 +384,12 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
                   </h4>
                   {(s.units || []).map((u:any, uIdx:number) => (
                     <div key={uIdx} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                      <span style={{ flex: 1, fontSize: '14px' }}>{u.unit_name}</span>
+                      <span style={{ flex: 1, fontSize: '14px', color: '#555' }}>
+                        {u.unit_name}
+                        <span style={{ color: '#1976d2', marginLeft: '8px', fontSize: '12px', fontWeight: 'bold', background: '#e3f2fd', padding: '2px 6px', borderRadius: '4px' }}>
+                          {(Number(u.end_page) >= Number(u.start_page) ? Number(u.end_page) - Number(u.start_page) + 1 : 10)}p
+                        </span>
+                      </span>
                       <input 
                         type="number" 
                         value={u.weight_percent || 0} 
