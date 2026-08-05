@@ -5,17 +5,40 @@ Write-Host "======================================================="
 Write-Host " [SelfStudy Local Runner Auto-Deploy Process]"
 Write-Host "======================================================="
 
-# 1. Resolve Executables (Python, NPM)
-$PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $PythonExe) {
-    $candidates = @(
-        "C:\Users\user\AppData\Local\Programs\Python\Python314\python.exe",
-        "C:\Users\user\AppData\Local\Programs\Python\Python313\python.exe",
-        "C:\Users\user\AppData\Local\Programs\Python\Python312\python.exe",
-        "C:\Python314\python.exe"
-    )
-    foreach ($c in $candidates) {
-        if (Test-Path $c) { $PythonExe = $c; break }
+$TargetDir = "d:\Workstation\selfstudy"
+$CurrentWorkspace = Resolve-Path "$PSScriptRoot\..\.."
+
+Write-Host "Current Workspace: $CurrentWorkspace"
+Write-Host "Target Deployment Dir: $TargetDir"
+
+# 1. Load .env variables
+$envFile = "$TargetDir\.env"
+if (Test-Path $envFile) {
+    Write-Host "Loading environment variables from .env..."
+    Get-Content $envFile | ForEach-Object {
+        $l = $_.Trim()
+        if ($l -and -not $l.StartsWith("#") -and $l.Contains("=")) {
+            $kv = $l.Split("=", 2)
+            $k = $kv[0].Trim()
+            $v = $kv[1].Trim()
+            [System.Environment]::SetEnvironmentVariable($k, $v, "Process")
+        }
+    }
+}
+
+# 2. Resolve Executables (Python, NPM)
+$PythonExe = "$TargetDir\backend\.venv\Scripts\python.exe"
+if (-not (Test-Path $PythonExe)) {
+    $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if (-not $PythonExe) {
+        $candidates = @(
+            "C:\Users\user\AppData\Local\Programs\Python\Python314\python.exe",
+            "C:\Users\user\AppData\Local\Programs\Python\Python313\python.exe",
+            "C:\Users\user\AppData\Local\Programs\Python\Python312\python.exe"
+        )
+        foreach ($c in $candidates) {
+            if (Test-Path $c) { $PythonExe = $c; break }
+        }
     }
 }
 Write-Host "Using Python: $PythonExe"
@@ -28,14 +51,7 @@ if (-not $NpmCmd) {
 }
 Write-Host "Using NPM: $NpmCmd"
 
-# Target deployment directory
-$TargetDir = "d:\Workstation\selfstudy"
-$CurrentWorkspace = Resolve-Path "$PSScriptRoot\..\.."
-
-Write-Host "Current Workspace: $CurrentWorkspace"
-Write-Host "Target Deployment Dir: $TargetDir"
-
-# 2. Stop running server on Port 8001
+# 3. Stop running server on Port 8001 and existing cloudflared
 Write-Host "Stopping process on Port 8001..."
 try {
     $conns = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue
@@ -47,11 +63,12 @@ try {
             }
         }
     }
-} catch {
-    Write-Host "Port notice: $_"
-}
+} catch {}
 
-# 3. Build Frontend
+Write-Host "Stopping cloudflared process..."
+Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# 4. Build Frontend
 Write-Host "Building React Frontend..."
 Set-Location "$CurrentWorkspace\frontend"
 & $NpmCmd install
@@ -59,27 +76,45 @@ if ($LASTEXITCODE -ne 0) { Write-Error "npm install failed"; exit $LASTEXITCODE 
 & $NpmCmd run build
 if ($LASTEXITCODE -ne 0) { Write-Error "npm build failed"; exit $LASTEXITCODE }
 
-# 4. Sync dist to Target Directory backend/dist
+# 5. Sync dist to Target Directory backend/dist
 Write-Host "Syncing dist to backend/dist..."
-if (Test-Path $TargetDir) {
-    if (-not (Test-Path "$TargetDir\backend\dist")) {
-        New-Item -ItemType Directory -Path "$TargetDir\backend\dist" -Force
+$distTargets = @("$TargetDir\backend\dist", "$CurrentWorkspace\backend\dist")
+foreach ($t in $distTargets) {
+    if (-not (Test-Path $t)) {
+        New-Item -ItemType Directory -Path $t -Force
     }
-    Copy-Item -Path "$CurrentWorkspace\frontend\dist\*" -Destination "$TargetDir\backend\dist\" -Recurse -Force
+    Copy-Item -Path "$CurrentWorkspace\frontend\dist\*" -Destination $t -Recurse -Force
 }
-if (-not (Test-Path "$CurrentWorkspace\backend\dist")) {
-    New-Item -ItemType Directory -Path "$CurrentWorkspace\backend\dist" -Force
-}
-Copy-Item -Path "$CurrentWorkspace\frontend\dist\*" -Destination "$CurrentWorkspace\backend\dist\" -Recurse -Force
 
-# 5. Sync Python dependencies
+# 6. Sync Python dependencies
 Write-Host "Updating Python Virtual Environment..."
 Set-Location "$TargetDir\backend"
 if (-not (Test-Path "$TargetDir\backend\.venv\Scripts\python.exe")) {
     & $PythonExe -m venv "$TargetDir\backend\.venv"
 }
-& "$TargetDir\backend\.venv\Scripts\python.exe" -m pip install -r "$TargetDir\backend\requirements.txt"
+$VenvPython = "$TargetDir\backend\.venv\Scripts\python.exe"
+& $VenvPython -m pip install -r "$TargetDir\backend\requirements.txt"
+
+# 7. Restart Server and Cloudflare Tunnel in background (detached via CIM/WMI)
+Write-Host "Restarting Backend Uvicorn Server on Port 8001..."
+$backendCmd = "cmd.exe /c `"cd /d $TargetDir\backend & .venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001`""
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $backendCmd } | Out-Null
+
+$token = $env:CLOUDFLARE_TUNNEL_TOKEN
+if ($token) {
+    Write-Host "Restarting Cloudflare Tunnel..."
+    $cfExe = "$TargetDir\cloudflared.exe"
+    if (-not (Test-Path $cfExe)) { $cfExe = "cloudflared" }
+    $cfCmd = "cmd.exe /c `"cd /d $TargetDir & `"$cfExe`" tunnel --no-autoupdate run --token $token`""
+    Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cfCmd } | Out-Null
+} else {
+    Write-Host "No CLOUDFLARE_TUNNEL_TOKEN found in environment or .env file."
+}
 
 Write-Host "======================================================="
 Write-Host " [SUCCESS] Deployment completed successfully!"
 Write-Host "======================================================="
+
+
+
+
