@@ -182,9 +182,12 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
       const cleanSubjects = subjects.map(s => ({
         ...s,
         weight_percent: Number(s.weight_percent) || 0,
-        units: (s.units || []).map((u: any) => ({
+        units: (s.units || []).map((u: any, idx: number) => ({
+          ...u,
           unit_name: typeof u === 'string' ? u : (u.unit_name || '단원'),
-          weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0
+          weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0,
+          start_page: idx === 0 ? Number(u.start_page) : (s.units[idx - 1]?.end_page ? Number(s.units[idx - 1].end_page) + 1 : Number(u.start_page)),
+          end_page: Number(u.end_page)
         }))
       }));
 
@@ -339,10 +342,11 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
                       <span style={{ fontSize: '12px', color: '#666' }}>p.</span>
                       <input 
                         type="number" 
-                        value={u.start_page || ''} 
-                        placeholder="시작" 
-                        onChange={e => handleUnitChange(sIdx, uIdx, 'start_page', Number(e.target.value))} 
-                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center' }}
+                        value={uIdx === 0 ? (u.start_page || '') : (s.units[uIdx - 1]?.end_page ? Number(s.units[uIdx - 1].end_page) + 1 : '')} 
+                        placeholder={uIdx === 0 ? "시작" : ""} 
+                        disabled={uIdx > 0}
+                        onChange={e => { if(uIdx === 0) handleUnitChange(sIdx, uIdx, 'start_page', Number(e.target.value)) }} 
+                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center', background: uIdx > 0 ? '#f5f5f5' : '#fff', color: uIdx > 0 ? '#888' : '#000' }}
                       />
                       <span>~</span>
                       <input 
