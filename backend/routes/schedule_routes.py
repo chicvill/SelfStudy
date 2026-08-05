@@ -46,8 +46,8 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
         for old_doc in old_results:
             if old_doc.get("payload", {}).get("status") != "superseded":
                 old_doc["payload"]["status"] = "superseded"
-                context.knowledge_repo.insert_knowledge(doc_id=old_doc["doc_id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
-                draft["ref_previous_schedule_id"] = old_doc["doc_id"]
+                context.knowledge_repo.insert_knowledge(doc_id=old_doc["id"], domain_type=old_doc["domain_type"], tags=old_doc["tags"], payload=old_doc["payload"])
+                draft["ref_previous_schedule_id"] = old_doc["id"]
                 break
 
         context.knowledge_repo.insert_knowledge(doc_id=schedule_id, domain_type="StudySchedule", tags=new_tags, payload=draft)
