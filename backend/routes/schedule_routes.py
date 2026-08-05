@@ -38,6 +38,7 @@ async def api_generate_schedule_final(payload: GenerateScheduleFinalPayload):
         draft["ref_goal_id"] = goal_id 
         draft["observer_code"] = observer_code
         draft["session_id"] = payload.session_id
+        draft["last_rescheduled_week"] = datetime.now().isocalendar()[1]
         new_tags = tags + ["최종스케줄", f"obs_{observer_code}", f"sess_{payload.session_id}"]
         
         search_tag = f"sess_{payload.session_id}"
@@ -212,9 +213,61 @@ async def finalize_schedule(payload: FinalizePayload):
 async def get_student_active_schedule(session_id: str):
     search_tag = f"sess_{session_id}"
     results = context.knowledge_repo.search_knowledge_by_tags([search_tag], limit=10)
+    
+    active_doc = None
     for doc in results:
         if doc.get("payload", {}).get("status") != "superseded":
-            return {"status": "success", "data": doc}
+            active_doc = doc
+            break
+            
+    if active_doc:
+        payload_data = active_doc.get("payload", {})
+        current_week = datetime.now().isocalendar()[1]
+        last_week = payload_data.get("last_rescheduled_week", -1)
+        
+        # If the week has changed (e.g. it's a new week), auto trigger reschedule
+        if last_week != -1 and current_week != last_week:
+            form_data = context.user_repo.get_user_profile(session_id) or {}
+            try:
+                new_schedule = context.scheduler.reschedule_auto(form_data, payload_data)
+                
+                # Update superseded status
+                payload_data["status"] = "superseded"
+                context.knowledge_repo.insert_knowledge(
+                    doc_id=active_doc["doc_id"],
+                    domain_type=active_doc["domain_type"],
+                    tags=active_doc["tags"],
+                    payload=payload_data
+                )
+                
+                new_schedule_id = f"kb_plan_{uuid.uuid4().hex[:8]}"
+                observer_code = payload_data.get("observer_code", ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
+                new_schedule["ref_previous_schedule_id"] = active_doc["doc_id"]
+                new_schedule["observer_code"] = observer_code
+                new_schedule["session_id"] = session_id
+                new_schedule["last_rescheduled_week"] = current_week
+                
+                tags = ["대화형온보딩", form_data.get("목표", "기본목표"), "최종스케줄", f"obs_{observer_code}", f"sess_{session_id}"]
+                context.knowledge_repo.insert_knowledge(
+                    doc_id=new_schedule_id,
+                    domain_type="StudySchedule",
+                    tags=tags,
+                    payload=new_schedule
+                )
+                
+                active_doc = {
+                    "doc_id": new_schedule_id,
+                    "domain_type": "StudySchedule",
+                    "tags": tags,
+                    "payload": new_schedule
+                }
+            except Exception as e:
+                print(f"[AUTO RESCHEDULE ERROR] {e}")
+                # Fallback to existing if fails
+                pass
+                
+        return {"status": "success", "data": active_doc}
+        
     return {"status": "success", "data": None}
 
 @router.get("/observer/{code}")
@@ -293,6 +346,7 @@ async def reschedule_auto(payload: RescheduleAutoPayload):
     new_schedule["ref_previous_schedule_id"] = active_doc["doc_id"]
     new_schedule["observer_code"] = observer_code
     new_schedule["session_id"] = payload.session_id
+    new_schedule["last_rescheduled_week"] = datetime.now().isocalendar()[1]
     
     tags = ["대화형온보딩", form_data.get("목표", "기본목표"), "최종스케줄", f"obs_{observer_code}", f"sess_{payload.session_id}"]
     

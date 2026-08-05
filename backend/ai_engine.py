@@ -333,6 +333,7 @@ class AITutor:
       }}
     ]
   }}
+- **매우 중요**: 각 교재의 `total_pages`와 각 단원의 `start_page`, `end_page`를 실제 값(또는 현실적인 근사치)으로 절대 누락 없이 채워넣으세요. 이 페이지 데이터가 일일 진도 배분의 유일한 기준이 됩니다. 단원들 간의 페이지는 서로 겹치거나 비지 않도록 연속적으로 구성하세요.
 - 원시 JSON 문자열로만 반환하십시오.
 """
         return await self._call_gemini(prompt)

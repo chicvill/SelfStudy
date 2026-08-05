@@ -41,6 +41,50 @@ export default function ProgressTable({
     return flatTasks.filter(t => t.subject === selectedSubject);
   }, [flatTasks, selectedSubject]);
 
+  const imbalanceAlert = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    const subjectStats: Record<string, { totalPast: number, completedPast: number }> = {};
+    
+    flatTasks.forEach(t => {
+      if (!t.subject || t.subject === '전과목 공통') return;
+      if (!subjectStats[t.subject]) {
+        subjectStats[t.subject] = { totalPast: 0, completedPast: 0 };
+      }
+      
+      if (t.date <= todayStr) {
+        subjectStats[t.subject].totalPast += 1;
+        if (t.completed) {
+          subjectStats[t.subject].completedPast += 1;
+        }
+      }
+    });
+
+    let maxRate = -1;
+    let minRate = 101;
+    let maxSubj = '';
+    let minSubj = '';
+
+    Object.entries(subjectStats).forEach(([subj, stats]) => {
+      if (stats.totalPast > 0) {
+        const rate = (stats.completedPast / stats.totalPast) * 100;
+        if (rate > maxRate) {
+          maxRate = rate;
+          maxSubj = subj;
+        }
+        if (rate < minRate) {
+          minRate = rate;
+          minSubj = subj;
+        }
+      }
+    });
+
+    if (maxRate !== -1 && minRate !== 101 && (maxRate - minRate) >= 30) {
+      return { maxSubj, maxRate: Math.round(maxRate), minSubj, minRate: Math.round(minRate) };
+    }
+    return null;
+  }, [flatTasks]);
+
   const totalTasks = filteredTasks.length;
   const completedTasksCount = useMemo(() => filteredTasks.filter(t => t.completed).length, [filteredTasks]);
   const progressPercent = totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0;
@@ -76,6 +120,15 @@ export default function ProgressTable({
         <h2 style={{ color: '#1976d2', margin: '0 0 4px 0', fontSize: '20px' }}>🏃 나의 진도 계획표</h2>
         <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>[{payload.plan_title || '진도 계획'}]</p>
       </div>
+
+      {imbalanceAlert && (
+        <div style={{ marginBottom: '15px', padding: '12px 16px', background: '#ffebee', borderRadius: '8px', border: '1px solid #ffcdd2', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '20px' }}>🚨</span>
+          <div style={{ fontSize: '14px', color: '#c62828', lineHeight: '1.4' }}>
+            <strong>학습 불균형 감지!</strong> '{imbalanceAlert.maxSubj}' 달성률({imbalanceAlert.maxRate}%) 대비 '{imbalanceAlert.minSubj}' 달성률({imbalanceAlert.minRate}%)이 크게 뒤처져 있습니다. 오늘은 <strong>'{imbalanceAlert.minSubj}'</strong> 학습에 더 집중해 보세요!
+          </div>
+        </div>
+      )}
 
       {/* 과목 탭 */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '15px', overflowX: 'auto', paddingBottom: '6px', WebkitOverflowScrolling: 'touch' }}>

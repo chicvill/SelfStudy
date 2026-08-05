@@ -24,7 +24,7 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
   const [targetDateIso, setTargetDateIso] = useState('');
   
   const [recommendedTextbooks, setRecommendedTextbooks] = useState<any[]>([]);
-  const [selectedTextbookTitle, setSelectedTextbookTitle] = useState<string>('');
+  const [selectedTextbookTitles, setSelectedTextbookTitles] = useState<string[]>([]);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -71,22 +71,27 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
     }
   };
 
-  const applyTextbookToSubjects = (tb: any) => {
-    setSelectedTextbookTitle(tb.title);
-    const formattedSubject = {
-      subject_name: tb.title,
-      textbook_title: tb.title,
-      weight_percent: 100,
-      units: (tb.units || []).map((u: any) => ({
-        unit_name: u.unit_name,
-        start_page: u.start_page,
-        end_page: u.end_page,
-        difficulty_type: u.difficulty_type || 'normal',
-        weight_multiplier: u.weight_multiplier || 1.0,
-        weight_percent: Math.round(100 / ((tb.units && tb.units.length) || 1))
-      }))
-    };
-    setSubjects([formattedSubject]);
+  const toggleTextbookToSubjects = (tb: any) => {
+    if (selectedTextbookTitles.includes(tb.title)) {
+      setSelectedTextbookTitles(prev => prev.filter(t => t !== tb.title));
+      setSubjects(prev => prev.filter(s => s.textbook_title !== tb.title));
+    } else {
+      setSelectedTextbookTitles(prev => [...prev, tb.title]);
+      const formattedSubject = {
+        subject_name: tb.title,
+        textbook_title: tb.title,
+        weight_percent: 100,
+        units: (tb.units || []).map((u: any) => ({
+          unit_name: u.unit_name,
+          start_page: u.start_page,
+          end_page: u.end_page,
+          difficulty_type: u.difficulty_type || 'normal',
+          weight_multiplier: u.weight_multiplier || 1.0,
+          weight_percent: Math.round(100 / ((tb.units && tb.units.length) || 1))
+        }))
+      };
+      setSubjects(prev => [...prev, formattedSubject]);
+    }
   };
 
   const generateSubjects = async () => {
@@ -269,8 +274,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           
           <TextbookSelectorChips
             recommendedTextbooks={recommendedTextbooks}
-            selectedTextbookTitle={selectedTextbookTitle}
-            onSelectTextbook={applyTextbookToSubjects}
+            selectedTextbookTitles={selectedTextbookTitles}
+            onToggleTextbook={toggleTextbookToSubjects}
           />
 
           {subjects.map((s, idx) => (
