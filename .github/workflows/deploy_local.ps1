@@ -6,6 +6,12 @@ Write-Host " [SelfStudy & StudyCafe Joint Stack Auto-Deploy Process]"
 Write-Host "======================================================="
 
 $WorkspaceDir = Resolve-Path "$PSScriptRoot\..\.."
+$RootEnv = "$WorkspaceDir\..\.env"
+
+if (Test-Path $RootEnv) {
+    Write-Host "Auto-syncing root .env file..."
+    Copy-Item -Path $RootEnv -Destination "$WorkspaceDir\.env" -Force
+}
 
 Write-Host "Working Directory: $WorkspaceDir"
 Write-Host "Rebuilding Docker Stack for SelfStudy (8005) & StudyCafe (8001)..."
