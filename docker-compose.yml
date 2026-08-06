@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  selfstudy:
+    build: .
+    container_name: mqnet-selfstudy
+    restart: always
+    ports:
+      - "8005:8005"
+    environment:
+      - PORT=8005
+      - DEPLOYMENT_MODE=LOCAL_STANDALONE
+      - DATABASE_URL=sqlite:////app/backend/selfstudy.db
+    volumes:
+      - ./backend/data:/app/backend/data
