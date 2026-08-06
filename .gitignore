@@ -29,3 +29,11 @@ cloudflared.exe
 .DS_Store
 Thumbs.db
 *.log
+
+# Python cache
+__pycache__/
+/**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
