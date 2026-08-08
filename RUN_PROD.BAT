@@ -1,52 +1,19 @@
 @echo off
+chcp 65001 > nul
 echo ========================================================
-echo   SelfStudy Platform - Local Production Start Script
+echo   SelfStudy & StudyCafe Joint Production Launcher
 echo ========================================================
 echo.
-
-if exist .env (
-    echo [.env found] Loading environment variables...
-    for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
-        set "%%A=%%B"
-    )
+if exist "%~dp0..\.env" (
+    echo [Auto Sync .env] Copying root MQnet/.env to selfstudy/.env...
+    copy /Y "%~dp0..\.env" "%~dp0.env" > nul
 )
+echo Starting SelfStudy (http://localhost:8005) and StudyCafe (http://localhost:8001)...
+cd /d "%~dp0"
 
-echo 1. Building Frontend React Application...
-cd frontend
-call npm install
-call npm run build
-cd ..
-
-echo 2. Syncing frontend dist to backend for Single-Container serving...
-if not exist "backend\dist" mkdir "backend\dist"
-xcopy /E /Y /Q "frontend\dist\*" "backend\dist\"
-
-echo 3. Checking Python Virtual Environment...
-if not exist "backend\.venv\Scripts\activate.bat" (
-    echo Creating Python virtual environment in backend\.venv...
-    python -m venv backend\.venv
-    call backend\.venv\Scripts\activate.bat
-    pip install -r backend\requirements.txt
-)
-
-echo 4. Starting Unified FastAPI Server on Port 8001...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8001 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
-start "SelfStudy Unified Server" cmd /k "cd backend && call .venv\Scripts\activate.bat && python -m uvicorn main:app --host 0.0.0.0 --port 8001"
-
-if not "%CLOUDFLARE_TUNNEL_TOKEN%"=="" (
-    echo 5. Starting Cloudflare Tunnel...
-    if exist cloudflared.exe (
-        start "Cloudflare Tunnel" cmd /k "cloudflared.exe tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
-    ) else (
-        start "Cloudflare Tunnel" cmd /k "cloudflared tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
-    )
-) else (
-    echo Cloudflare Tunnel token not found in .env. Running in local mode.
-)
-
+docker compose up -d --build
 echo.
-echo [OK] All production services started!
-echo - Unified Server: http://localhost:8001
-echo - Custom Domain: https://selfstudy.chicvill.store
+echo Container Status:
+docker compose ps
 echo.
 pause

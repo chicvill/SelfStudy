@@ -24,7 +24,7 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
   const [targetDateIso, setTargetDateIso] = useState('');
   
   const [recommendedTextbooks, setRecommendedTextbooks] = useState<any[]>([]);
-  const [selectedTextbookTitles, setSelectedTextbookTitles] = useState<string[]>([]);
+  const [selectedTextbookTitle, setSelectedTextbookTitle] = useState<string>('');
 
   useEffect(() => {
     const loadSession = async () => {
@@ -71,27 +71,22 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
     }
   };
 
-  const toggleTextbookToSubjects = (tb: any) => {
-    if (selectedTextbookTitles.includes(tb.title)) {
-      setSelectedTextbookTitles(prev => prev.filter(t => t !== tb.title));
-      setSubjects(prev => prev.filter(s => s.textbook_title !== tb.title));
-    } else {
-      setSelectedTextbookTitles(prev => [...prev, tb.title]);
-      const formattedSubject = {
-        subject_name: tb.title,
-        textbook_title: tb.title,
-        weight_percent: 100,
-        units: (tb.units || []).map((u: any) => ({
-          unit_name: u.unit_name,
-          start_page: u.start_page,
-          end_page: u.end_page,
-          difficulty_type: u.difficulty_type || 'normal',
-          weight_multiplier: u.weight_multiplier || 1.0,
-          weight_percent: Math.round(100 / ((tb.units && tb.units.length) || 1))
-        }))
-      };
-      setSubjects(prev => [...prev, formattedSubject]);
-    }
+  const applyTextbookToSubjects = (tb: any) => {
+    setSelectedTextbookTitle(tb.title);
+    const formattedSubject = {
+      subject_name: tb.title,
+      textbook_title: tb.title,
+      weight_percent: 100,
+      units: (tb.units || []).map((u: any) => ({
+        unit_name: u.unit_name,
+        start_page: u.start_page,
+        end_page: u.end_page,
+        difficulty_type: u.difficulty_type || 'normal',
+        weight_multiplier: u.weight_multiplier || 1.0,
+        weight_percent: Math.round(100 / ((tb.units && tb.units.length) || 1))
+      }))
+    };
+    setSubjects([formattedSubject]);
   };
 
   const generateSubjects = async () => {
@@ -115,6 +110,29 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
     setLoading(false);
   };
 
+  const generateSubjectWeights = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/knowledge/generate_subject_weights`, {
+        subjects: subjects,
+        user_goal: goalData
+      });
+      const data = res.data.data;
+      if (data.error) {
+        setError(`AI 에러: ${data.error}`);
+        setLoading(false);
+        return;
+      }
+      // Merge weights
+      const weightedSubjects = data.subjects || data.Subjects || [];
+      setSubjects(weightedSubjects);
+      setStep(3);
+    } catch (err) {
+      setError("과목 비중 산출 중 오류가 발생했습니다.");
+    }
+    setLoading(false);
+  };
+
   const generateUnits = async () => {
     setLoading(true);
     try {
@@ -129,54 +147,32 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
         return;
       }
       setSubjects(data.subjects || data.Subjects || []);
-      setStep(3);
+      setStep(4);
     } catch (err) {
       setError("단원 생성 중 오류가 발생했습니다.");
     }
     setLoading(false);
   };
 
-  const calculateWeightsLocal = () => {
-    let totalAllPages = 0;
-    const subjectsWithPages = subjects.map(s => {
-      let subjPages = 0;
-      const unitsWithPages = (s.units || []).map((u: any, idx: number) => {
-        const start = idx === 0 ? Number(u.start_page) : (s.units[idx - 1]?.end_page ? Number(s.units[idx - 1].end_page) + 1 : Number(u.start_page));
-        const end = Number(u.end_page);
-        const finalStart = isNaN(start) ? 1 : start;
-        const finalEnd = isNaN(end) ? (finalStart + 9) : end;
-        const pages = finalEnd >= finalStart ? (finalEnd - finalStart + 1) : 10;
-        subjPages += pages;
-        return { ...u, start_page: finalStart, end_page: finalEnd, _pages: pages };
+  const generateUnitWeights = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/knowledge/generate_unit_weights`, {
+        subjects_with_units: subjects,
+        user_goal: goalData
       });
-      totalAllPages += subjPages;
-      return { ...s, units: unitsWithPages, _subjPages: subjPages };
-    });
-
-    const newSubjects = subjectsWithPages.map(s => {
-      const sWeight = totalAllPages > 0 ? Math.round((s._subjPages / totalAllPages) * 100) : Math.round(100 / subjects.length);
-      const units = s.units.map((u: any) => {
-        const uWeight = s._subjPages > 0 ? Math.round((u._pages / s._subjPages) * 100) : Math.round(100 / s.units.length);
-        delete u._pages;
-        return { ...u, weight_percent: uWeight };
-      });
-      
-      const unitTotal = units.reduce((acc: number, u: any) => acc + (u.weight_percent || 0), 0);
-      if (unitTotal !== 100 && units.length > 0) {
-        units[units.length - 1].weight_percent += (100 - unitTotal);
+      const data = res.data.data;
+      if (data.error) {
+        setError(`AI 에러: ${data.error}`);
+        setLoading(false);
+        return;
       }
-
-      delete s._subjPages;
-      return { ...s, weight_percent: sWeight, units };
-    });
-
-    const subjTotal = newSubjects.reduce((acc: number, s: any) => acc + (s.weight_percent || 0), 0);
-    if (subjTotal !== 100 && newSubjects.length > 0) {
-      newSubjects[newSubjects.length - 1].weight_percent += (100 - subjTotal);
+      setSubjects(data.subjects || data.Subjects || []);
+      setStep(5);
+    } catch (err) {
+      setError("단원 비중 산출 중 오류가 발생했습니다.");
     }
-
-    setSubjects(newSubjects);
-    setStep(4);
+    setLoading(false);
   };
 
   const finalizeSchedule = async () => {
@@ -186,12 +182,9 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
       const cleanSubjects = subjects.map(s => ({
         ...s,
         weight_percent: Number(s.weight_percent) || 0,
-        units: (s.units || []).map((u: any, idx: number) => ({
-          ...u,
+        units: (s.units || []).map((u: any) => ({
           unit_name: typeof u === 'string' ? u : (u.unit_name || '단원'),
-          weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0,
-          start_page: Number(u.start_page) || 1,
-          end_page: Number(u.end_page) || 10
+          weight_percent: Number(typeof u === 'object' ? u.weight_percent : 0) || 0
         }))
       }));
 
@@ -273,8 +266,8 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           
           <TextbookSelectorChips
             recommendedTextbooks={recommendedTextbooks}
-            selectedTextbookTitles={selectedTextbookTitles}
-            onToggleTextbook={toggleTextbookToSubjects}
+            selectedTextbookTitle={selectedTextbookTitle}
+            onSelectTextbook={applyTextbookToSubjects}
           />
 
           {subjects.map((s, idx) => (
@@ -294,15 +287,42 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           </div>
           <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button onClick={() => window.location.reload()} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 목표 재입력</button>
-            <button onClick={generateUnits} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (단원/페이지 입력) ➡️</button>
+            <button onClick={generateSubjectWeights} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (과목 비중 산출) ➡️</button>
           </div>
         </div>
       )}
 
       {!loading && step === 3 && (
         <div>
-          <h3>📑 Step 3: 교재 단원(목차) 및 페이지 범주 확정</h3>
-          <p style={{ color: '#666' }}>교재의 단원명과 시작/끝 페이지 범위를 편집해 주세요. 입력하신 페이지 분량에 정확히 비례하여 자동으로 비중이 계산됩니다.</p>
+          <h3>⚖️ Step 3: 과목별 비중 조절</h3>
+          <p style={{ color: '#666' }}>AI가 산출한 과목별 학습 비중입니다. 총합이 100%가 되도록 조정해주세요.</p>
+          {subjects.map((s, idx) => (
+            <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+              <span style={{ width: '150px', fontWeight: 'bold' }}>{s.subject_name}</span>
+              <input 
+                type="number" 
+                value={s.weight_percent || 0} 
+                onChange={e => handleSubjectChange(idx, 'weight_percent', Number(e.target.value))} 
+                style={{ width: '80px', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
+              /> %
+            </div>
+          ))}
+          <div style={{ fontWeight: 'bold', marginTop: '15px' }}>
+            합계: <span style={{ color: subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) === 100 ? 'green' : 'red' }}>
+              {subjects.reduce((a, b) => a + (b.weight_percent || 0), 0)}%
+            </span>
+          </div>
+          <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button onClick={() => setStep(2)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 이전 단계 (과목 확정)</button>
+            <button onClick={generateUnits} disabled={subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) !== 100} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', opacity: subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) === 100 ? 1 : 0.5 }}>다음 단계 (단원 생성) ➡️</button>
+          </div>
+        </div>
+      )}
+
+      {!loading && step === 4 && (
+        <div>
+          <h3>📑 Step 4: 교재 단원(목차) 및 페이지 범주 확정</h3>
+          <p style={{ color: '#666' }}>교재의 단원명과 시작/끝 페이지 범위를 편집할 수 있습니다.</p>
           <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '10px' }}>
             {subjects.map((s, sIdx) => (
               <div key={sIdx} style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -319,11 +339,10 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
                       <span style={{ fontSize: '12px', color: '#666' }}>p.</span>
                       <input 
                         type="number" 
-                        value={uIdx === 0 ? (u.start_page || '') : (s.units[uIdx - 1]?.end_page ? Number(s.units[uIdx - 1].end_page) + 1 : (u.start_page || ''))} 
-                        placeholder={uIdx === 0 ? "시작" : ""} 
-                        disabled={uIdx > 0}
-                        onChange={e => { if(uIdx === 0) handleUnitChange(sIdx, uIdx, 'start_page', Number(e.target.value)) }} 
-                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center', background: uIdx > 0 ? '#f5f5f5' : '#fff', color: uIdx > 0 ? '#888' : '#000' }}
+                        value={u.start_page || ''} 
+                        placeholder="시작" 
+                        onChange={e => handleUnitChange(sIdx, uIdx, 'start_page', Number(e.target.value))} 
+                        style={{ width: '55px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc', textAlign: 'center' }}
                       />
                       <span>~</span>
                       <input 
@@ -342,54 +361,28 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
             ))}
           </div>
           <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={() => setStep(2)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 이전 단계 (과목 확정)</button>
-            <button onClick={calculateWeightsLocal} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (비중 자동 산출) ➡️</button>
+            <button onClick={() => setStep(3)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '12px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>⬅️ 이전 단계 (과목 비중)</button>
+            <button onClick={generateUnitWeights} style={{ background: '#1565c0', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>다음 단계 (단원 비중 산출) ➡️</button>
           </div>
         </div>
       )}
 
-      {!loading && step === 4 && (
+      {!loading && step === 5 && (
         <div>
-          <h3>⚖️ Step 4: 과목별 & 단원별 비중 조절 (자동 산출 결과)</h3>
-          <p style={{ color: '#666' }}>입력하신 페이지 분량에 비례하여 비중이 수학적으로 자동 산출되었습니다. 필요시 미세 조정해 주세요.</p>
-          
+          <h3>⚖️ Step 5: 단원별 비중 조절</h3>
+          <p style={{ color: '#666' }}>각 과목 내에서 단원들의 중요도를 조절하세요. (과목별 총합 100%)</p>
           <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '10px' }}>
-            <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #90caf9' }}>
-              <h4 style={{ margin: '0 0 15px 0', color: '#1565c0' }}>전체 과목 비중</h4>
-              {subjects.map((s, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                  <span style={{ width: '150px', fontWeight: 'bold' }}>{s.subject_name}</span>
-                  <input 
-                    type="number" 
-                    value={s.weight_percent || 0} 
-                    onChange={e => handleSubjectChange(idx, 'weight_percent', Number(e.target.value))} 
-                    style={{ width: '80px', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', textAlign: 'right' }}
-                  /> %
-                </div>
-              ))}
-              <div style={{ fontWeight: 'bold', marginTop: '10px' }}>
-                과목 비중 합계: <span style={{ color: subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) === 100 ? 'green' : 'red' }}>
-                  {subjects.reduce((a, b) => a + (b.weight_percent || 0), 0)}%
-                </span>
-              </div>
-            </div>
-
             {subjects.map((s, sIdx) => {
               const total = (s.units || []).reduce((a:any, b:any) => a + (b.weight_percent || 0), 0);
               return (
                 <div key={sIdx} style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-                  <h4 style={{ margin: '0 0 15px 0', color: '#333', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>[{s.subject_name}] 단원 비중</span>
-                    <span style={{ color: total === 100 ? 'green' : 'red', fontSize: '14px' }}>단원 합계: {total}%</span>
+                  <h4 style={{ margin: '0 0 15px 0', color: '#1565c0', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{s.subject_name}</span>
+                    <span style={{ color: total === 100 ? 'green' : 'red', fontSize: '14px' }}>합계: {total}%</span>
                   </h4>
                   {(s.units || []).map((u:any, uIdx:number) => (
                     <div key={uIdx} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                      <span style={{ flex: 1, fontSize: '14px', color: '#555' }}>
-                        {u.unit_name}
-                        <span style={{ color: '#1976d2', marginLeft: '8px', fontSize: '12px', fontWeight: 'bold', background: '#e3f2fd', padding: '2px 6px', borderRadius: '4px' }}>
-                          {(Number(u.end_page) >= Number(u.start_page) ? Number(u.end_page) - Number(u.start_page) + 1 : 10)}p
-                        </span>
-                      </span>
+                      <span style={{ flex: 1, fontSize: '14px' }}>{u.unit_name}</span>
                       <input 
                         type="number" 
                         value={u.weight_percent || 0} 
@@ -404,14 +397,11 @@ export default function ScheduleBuilderWizard({ sessionId, userId, initialFormDa
           </div>
           
           <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={() => setStep(3)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '15px 25px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>⬅️ 이전 단계 (단원 수정)</button>
+            <button onClick={() => setStep(4)} style={{ background: '#f5f5f5', color: '#555', border: '1px solid #ccc', padding: '15px 25px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>⬅️ 이전 단계 (단원 확정)</button>
             <button 
               onClick={finalizeSchedule} 
-              disabled={
-                subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) !== 100 || 
-                subjects.some(s => (s.units||[]).reduce((a:any,b:any)=>a+(b.weight_percent||0),0) !== 100)
-              }
-              style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '15px 30px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', opacity: (subjects.reduce((a, b) => a + (b.weight_percent || 0), 0) === 100 && subjects.every(s => (s.units||[]).reduce((a:any,b:any)=>a+(b.weight_percent||0),0) === 100)) ? 1 : 0.5 }}
+              disabled={subjects.some(s => (s.units||[]).reduce((a:any,b:any)=>a+(b.weight_percent||0),0) !== 100)}
+              style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '15px 30px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', opacity: subjects.some(s => (s.units||[]).reduce((a:any,b:any)=>a+(b.weight_percent||0),0) !== 100) ? 0.5 : 1 }}
             >
               🚀 최종 스케줄 생성 (완료)
             </button>

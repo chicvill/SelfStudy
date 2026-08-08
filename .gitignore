@@ -1,40 +1,39 @@
-# Environments
-.env
-.env.*
-!.env.example
-!.env.production
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
-
-# Database
-*.db
-*.sqlite3
-backend/selfstudy.db
-
-# Node
+# Dependencies
 node_modules/
-build/
-.npm/
-!backend/dist/
-!backend/dist/**
+**/node_modules/
+.venv/
+**/.venv/
+venv/
+**/venv/
 
-# IDE
-.vscode/
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
 
 # Executables & Binaries
 cloudflared.exe
 *.exe
 
+# Database & Environment
+*.db
+*.sqlite3
+.env
+.env.*
+!.env.template
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Python cache
+__pycache__/
+/**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
 
