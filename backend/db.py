@@ -179,9 +179,21 @@ class DatabaseManager:
                     user_id TEXT PRIMARY KEY,
                     password TEXT NOT NULL,
                     name TEXT DEFAULT '',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_visit_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    role TEXT DEFAULT 'GENERAL',
+                    is_locked BOOLEAN DEFAULT FALSE
                 )
             """)
+            
+            # 컬럼 추가 (이미 테이블이 존재할 경우 대비)
+            try:
+                cur.execute("ALTER TABLE study_users ADD COLUMN last_visit_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                cur.execute("ALTER TABLE study_users ADD COLUMN role TEXT DEFAULT 'GENERAL'")
+                cur.execute("ALTER TABLE study_users ADD COLUMN is_locked BOOLEAN DEFAULT FALSE")
+            except Exception:
+                pass # 이미 컬럼이 있으면 무시
+
             
             # 5. 유저별 최신 프로필 폼 저장용 테이블
             cur.execute("""
@@ -256,6 +268,15 @@ class DatabaseManager:
                     )
                 """)
 
+            # 7. 카페 환경설정 (IP 및 고정형 QR) 테이블
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cafe_settings (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # 관리자 계정 기본 세팅 (010-1111-2222 / 1212)
             cur.execute("""
                 INSERT INTO study_users (user_id, password, name) VALUES ('010-1111-2222', '1212', '관리자')
@@ -303,7 +324,7 @@ class UserRepository:
         try:
             with self.db_manager.connection() as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT user_id, password, name FROM study_users WHERE user_id = ?", (user_id,))
+                cur.execute("SELECT user_id, password, name, role, last_visit_at, is_locked FROM study_users WHERE user_id = ?", (user_id,))
                 row = cur.fetchone()
                 if row:
                     return dict(row)
@@ -325,6 +346,61 @@ class UserRepository:
         except Exception as e:
             print(f"Update User Info Error: {e}")
             return False
+
+    def update_user_visit(self, user_id: str) -> bool:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE study_users 
+                    SET last_visit_at = CURRENT_TIMESTAMP, is_locked = 0
+                    WHERE user_id = ?
+                """, (user_id,))
+                return True
+        except Exception as e:
+            print(f"Update User Visit Error: {e}")
+            return False
+
+    def update_user_lock(self, user_id: str, is_locked: bool) -> bool:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE study_users 
+                    SET is_locked = ?
+                    WHERE user_id = ?
+                """, (1 if is_locked else 0, user_id))
+                return True
+        except Exception as e:
+            print(f"Update User Lock Error: {e}")
+            return False
+
+    def enforce_access_policies(self):
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                
+                # 1. 7일 경과 GENERAL 회원 차단 (is_locked = 1)
+                cur.execute("""
+                    UPDATE study_users
+                    SET is_locked = 1
+                    WHERE role = 'GENERAL' 
+                      AND is_locked = 0
+                      AND last_visit_at < datetime('now', '-7 days')
+                """)
+                
+                # 2. 30일 경과 GENERAL 회원 삭제
+                # 관련 데이터(attendance, knowledge 등)는 ON DELETE CASCADE가 없으므로 
+                # 수동 삭제하거나, 유저만 삭제해도 로그인 불가로 실질적 차단 됨.
+                # 여기서는 완전 삭제를 위해 knowledge 등도 지워야 할 수 있으나 
+                # 가장 중요한 study_users 삭제부터 진행
+                cur.execute("""
+                    DELETE FROM study_users
+                    WHERE role = 'GENERAL'
+                      AND last_visit_at < datetime('now', '-30 days')
+                """)
+        except Exception as e:
+            print(f"Enforce Access Policies Error: {e}")
 
     def save_user_profile(self, user_id: str, form_data: dict) -> bool:
         try:
@@ -604,3 +680,37 @@ class MessageRepository:
         except Exception as e:
             print(f"Get Messages Error: {e}")
             return []
+
+
+class CafeSettingsRepository:
+    def __init__(self, db_manager: DatabaseManager):
+        self.db_manager = db_manager
+
+    def set_setting(self, key: str, value: str) -> bool:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO cafe_settings (setting_key, setting_value)
+                    VALUES (?, ?)
+                    ON CONFLICT(setting_key) DO UPDATE SET
+                        setting_value = excluded.setting_value,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (key, value))
+                return True
+        except Exception as e:
+            print(f"Set Setting Error: {e}")
+            return False
+
+    def get_setting(self, key: str) -> str | None:
+        try:
+            with self.db_manager.connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT setting_value FROM cafe_settings WHERE setting_key = ?", (key,))
+                row = cur.fetchone()
+                if row:
+                    return row['setting_value']
+                return None
+        except Exception as e:
+            print(f"Get Setting Error: {e}")
+            return None

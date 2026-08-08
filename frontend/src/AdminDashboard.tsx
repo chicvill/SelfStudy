@@ -14,6 +14,9 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentIp, setCurrentIp] = useState('');
+  const [currentQr, setCurrentQr] = useState('');
   
   // Search query
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,7 +102,40 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
 
   useEffect(() => {
     fetchStudents();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const ipRes = await axios.get(`${API_URL}/api/settings/wifi-ip`);
+      setCurrentIp(ipRes.data.ip);
+      const qrRes = await axios.get(`${API_URL}/api/settings/qr-code`);
+      setCurrentQr(qrRes.data.qr_code);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const registerCurrentIp = async () => {
+    try {
+      const res = await axios.post(`${API_URL}/api/settings/wifi-ip`);
+      setCurrentIp(res.data.ip);
+      alert('현재 관리자의 접속 IP가 매장 공식 Wi-Fi IP로 등록되었습니다.');
+    } catch (e) {
+      alert('IP 등록에 실패했습니다.');
+    }
+  };
+
+  const regenerateQr = async () => {
+    if (!window.confirm('기존 QR 코드가 무효화됩니다. 새로 생성하시겠습니까?')) return;
+    try {
+      const res = await axios.post(`${API_URL}/api/settings/qr-code`);
+      setCurrentQr(res.data.qr_code);
+      alert('새로운 출석 갱신용 QR 코드가 발급되었습니다.');
+    } catch (e) {
+      alert('QR 생성에 실패했습니다.');
+    }
+  };
 
   // Poll real-time admin alerts every 3 seconds
   useEffect(() => {
@@ -450,23 +486,32 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '30px' }}>
         <h2 style={{ color: '#1976d2', marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>🏫 관리 대시보드</span>
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              style={{
-                background: '#fff0f0',
-                color: '#d32f2f',
-                border: '1px solid #ffcdd2',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🚪 로그아웃
-            </button>
-          )}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setShowSettings(true)}
+                style={{
+                  background: '#f5f5f5', color: '#333', border: '1px solid #ccc',
+                  padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer'
+                }}
+              >
+                ⚙️ 매장 환경설정 (출입 인증)
+              </button>
+              <button
+                onClick={onLogout}
+                style={{
+                  background: '#fff0f0',
+                  color: '#d32f2f',
+                  border: '1px solid #ffcdd2',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                🚪 로그아웃
+              </button>
+            </div>
         </h2>
 
         {/* 🚨 실시간 긴급 경고 센터 (Emergency Alert Center) */}
@@ -1034,6 +1079,65 @@ export default function AdminDashboard({ onLogout, onOpenParentView }: AdminDash
         )}
       </div>
     </div>
+
+    {/* 환경설정 모달 */}
+    {showSettings && (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+        <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', width: '500px', maxWidth: '90%', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <h2 style={{ marginTop: 0, color: '#333' }}>⚙️ 매장 환경설정</h2>
+          
+          <div style={{ marginBottom: '20px', padding: '15px', background: '#f5f5f5', borderRadius: '8px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#1976d2' }}>1. Wi-Fi IP 기반 출석 인증</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
+              현재 등록된 매장 공식 IP: <strong>{currentIp || '미등록'}</strong>
+            </p>
+            <button onClick={registerCurrentIp} style={{ background: '#1976d2', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+              현재 접속 중인 기기의 IP를 매장 IP로 등록
+            </button>
+            <p style={{ fontSize: '11px', color: '#999', marginTop: '5px' }}>
+              * 매장의 Wi-Fi에 연결된 상태에서 이 버튼을 눌러주세요. 학생들이 해당 Wi-Fi에 접속 시 1주일 미방문 차단이 자동으로 해제됩니다.
+            </p>
+          </div>
+
+          <div style={{ marginBottom: '20px', padding: '15px', background: '#f5f5f5', borderRadius: '8px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#e65100' }}>2. 고정형 QR 코드 기반 출석 인증</h4>
+            <p style={{ fontSize: '13px', color: '#666', marginBottom: '10px' }}>
+              Wi-Fi를 사용하지 않는 학생을 위해 매장 입구에 부착할 고정형 QR 코드입니다.
+            </p>
+            {currentQr ? (
+              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${currentQr}`} alt="QR Code" style={{ border: '5px solid #fff', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }} />
+                <div style={{ marginTop: '5px', fontSize: '11px', color: '#666' }}>{currentQr}</div>
+              </div>
+            ) : (
+              <div style={{ color: '#999', fontSize: '13px', marginBottom: '10px' }}>생성된 QR 코드가 없습니다.</div>
+            )}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={regenerateQr} style={{ flex: 1, background: '#e65100', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                새 QR 코드 발급(갱신)
+              </button>
+              {currentQr && (
+                <button onClick={() => {
+                  const printWindow = window.open('', '', 'width=600,height=600');
+                  if (printWindow) {
+                    printWindow.document.write(`<html><body style="text-align:center; padding-top: 50px;"><h2>스터디카페 출석 갱신 QR</h2><img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${currentQr}" /><p>셀프스터디 앱에서 이 QR 코드를 스캔하세요.</p></body></html>`);
+                    printWindow.document.close();
+                    printWindow.focus();
+                    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                  }
+                }} style={{ flex: 1, background: '#4caf50', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                  🖨️ 인쇄하기
+                </button>
+              )}
+            </div>
+          </div>
+
+          <button onClick={() => setShowSettings(false)} style={{ width: '100%', padding: '10px', background: '#ccc', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+            닫기
+          </button>
+        </div>
+      </div>
+    )}
   </div>
 );
 }

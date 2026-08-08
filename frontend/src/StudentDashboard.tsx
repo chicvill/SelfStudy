@@ -42,6 +42,12 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState<{weekNum: number, taskIdx: number, task: any} | null>(null);
 
+  // 권한 및 차단(Lock) 상태
+  const [isLocked, setIsLocked] = useState(false);
+  const [userRole, setUserRole] = useState('GENERAL');
+  const [showQrScanner, setShowQrScanner] = useState(false);
+
+
   const handleOpenVerifyModal = (weekNum: number, taskIdx: number, task: any) => {
     setVerifyTarget({ weekNum, taskIdx, task });
     setShowVerifyModal(true);
@@ -90,13 +96,54 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
     }
   };
 
+  const checkAuthStatus = async () => {
+    // 백그라운드 IP 자동 인증 시도
+    try {
+      await axios.post(`${API_URL}/knowledge/check-in`, { user_id: sessionId });
+    } catch (e) {
+      // 실패하더라도 진행 (QR 인증 대기)
+    }
+
+    // 유저 상태 조회
+    try {
+      const resp = await axios.get(`${API_URL}/knowledge/user/${sessionId}`);
+      if (resp.data.status === 'success' && resp.data.data) {
+        setUserRole(resp.data.data.role || 'GENERAL');
+        setIsLocked(!!resp.data.data.is_locked);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     if (sessionId) {
-      fetchSchedule();
-      fetchAttendance();
-      fetchProfile();
+      checkAuthStatus().then(() => {
+        fetchSchedule();
+        fetchAttendance();
+        fetchProfile();
+      });
     }
   }, [sessionId]);
+
+  const handleQrCheckIn = async () => {
+    const qrData = prompt('스캔된 QR 코드 값을 입력하세요 (데모용):');
+    if (!qrData) return;
+    try {
+      const resp = await axios.post(`${API_URL}/knowledge/check-in`, { user_id: sessionId, qr_code: qrData });
+      if (resp.data.status === 'success') {
+        alert(resp.data.message);
+        setIsLocked(false);
+        fetchSchedule();
+        fetchAttendance();
+        fetchProfile();
+      } else {
+        alert(resp.data.message);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '인증에 실패했습니다.');
+    }
+  };
 
   const toggleTask = async (weekNum: number, taskIdx: number, forceCompleted?: boolean) => {
     if (!schedule) return;
@@ -307,12 +354,41 @@ export default function StudentDashboard({ sessionId, onReschedule: _onReschedul
   }, [filteredTasks.length, selectedSubject]);
 
   if (loading) return <div style={{ color: '#fff', textAlign: 'center', padding: '50px' }}>일정을 불러오는 중입니다...</div>;
-  if (!schedule) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff' }}>확정된 일정이 없습니다. 온보딩을 완료해주세요!</div>;
+  if (!schedule && !isLocked) return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff' }}>확정된 일정이 없습니다. 온보딩을 완료해주세요!</div>;
 
   const remainingDays = getRemainingVoucherDays();
 
   return (
-    <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, minHeight: 0, paddingBottom: '20px' }}>
+    <div style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, minHeight: 0, paddingBottom: '20px', position: 'relative' }}>
+      
+      {/* 잠금 모달 (7일 이상 미방문 시) */}
+      {isLocked && userRole === 'GENERAL' && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ background: '#fff', padding: '40px', borderRadius: '16px', textAlign: 'center', maxWidth: '400px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '10px' }}>🛑</div>
+            <h2 style={{ color: '#d32f2f', margin: '0 0 15px 0' }}>이용이 제한되었습니다</h2>
+            <p style={{ color: '#555', fontSize: '15px', lineHeight: '1.5', marginBottom: '25px' }}>
+              마지막 스터디카페 방문일로부터 7일이 경과하여 진도 계획표 접근이 차단되었습니다.
+              <br /><br />
+              매장에 방문하여 <strong>지정된 Wi-Fi에 연결</strong>하거나 매장 입구의 <strong>출석용 QR 코드</strong>를 스캔하여 인증해주세요.
+            </p>
+            <button
+              onClick={handleQrCheckIn}
+              style={{ background: '#1976d2', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', width: '100%', boxShadow: '0 4px 10px rgba(25, 118, 210, 0.3)' }}
+            >
+              📷 QR 코드로 출석 인증하기
+            </button>
+            <p style={{ fontSize: '12px', color: '#999', marginTop: '15px' }}>
+              (참고: 매장 Wi-Fi에 연결된 상태에서 앱을 다시 실행하면 자동 인증됩니다.)
+            </p>
+          </div>
+        </div>
+      )}
       
       {/* 자율형 관리형 전환 권유 배너 */}
       {managementType === '자율형' && (

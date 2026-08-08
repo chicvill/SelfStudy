@@ -14,6 +14,7 @@ from routes.schedule_routes import router as schedule_router
 from routes.attendance_routes import router as attendance_router
 from routes.admin_routes import router as admin_router
 from routes.message_routes import router as message_router
+from routes.admin_settings_routes import router as admin_settings_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +51,7 @@ app.include_router(schedule_router)
 app.include_router(attendance_router)
 app.include_router(admin_router)
 app.include_router(message_router)
+app.include_router(admin_settings_router)
 
 # ----------------- Static File Hosting & SPA Fallback -----------------
 def get_dist_dir():

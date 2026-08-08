@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from typing import Optional
 from schemas import AuthPayload, ProfilePayload
 from deps import context
 
@@ -9,6 +10,10 @@ class UpdateUserPayload(BaseModel):
     user_id: str
     name: str
     password: str
+
+class CheckInPayload(BaseModel):
+    user_id: str
+    qr_code: Optional[str] = None
 
 @router.post("/signup")
 async def signup(payload: AuthPayload):
@@ -31,11 +36,33 @@ async def login(payload: AuthPayload):
             "status": "success",
             "success": True,
             "message": "Login successful",
-            "name": user_info["name"]
+            "name": user_info["name"],
+            "role": user_info.get("role", "GENERAL"),
+            "is_locked": bool(user_info.get("is_locked", False))
         }
     else:
         print(f"[DEBUG] Login failed for {payload.user_id} - invalid credentials")
         return {"status": "error", "success": False, "message": "Invalid user ID or password"}
+
+@router.post("/check-in")
+async def check_in(payload: CheckInPayload, request: Request):
+    user_info = context.user_repo.get_user_info(payload.user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "127.0.0.1").split(",")[0].strip()
+    
+    cafe_ip = context.cafe_settings_repo.get_setting("CAFE_WIFI_IP")
+    current_qr = context.cafe_settings_repo.get_setting("CURRENT_QR_CODE")
+    
+    is_valid_ip = cafe_ip and client_ip == cafe_ip
+    is_valid_qr = payload.qr_code and current_qr and payload.qr_code == current_qr
+    
+    if is_valid_ip or is_valid_qr:
+        context.user_repo.update_user_visit(payload.user_id)
+        return {"status": "success", "message": "인증 완료", "method": "IP" if is_valid_ip else "QR"}
+    else:
+        return {"status": "error", "message": "인증 실패. 올바른 매장 Wi-Fi에 연결하거나 유효한 QR 코드를 스캔하세요.", "client_ip": client_ip}
 
 @router.get("/user/{user_id}")
 async def get_user_info(user_id: str):
